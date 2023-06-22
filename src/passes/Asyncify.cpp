@@ -171,15 +171,7 @@
 //    calls, so that you know when to start an asynchronous operation and
 //    when to propagate results back.
 //
-//  * asyncify_get_catch_counter(): call this to get the current value of the
-//    internal "__asyncify_catch_counter" variable (only when assertions
-//    or ignore mode are enabled).
-//
-//  * asyncify_get_catch_counter(): call this to get the current value of the
-//    internal "__asyncify_catch_counter" variable (only when assertions
-//    or ignore mode are enabled).
-//
-// These six functions are exported so that you can call them from the
+// These five functions are exported so that you can call them from the
 // outside. If you want to manage things from inside the wasm, then you
 // couldn't have called them before they were created by this pass. To work
 // around that, you can create imports to asyncify.start_unwind,
@@ -256,8 +248,9 @@
 //
 //   --pass-arg=asyncify-ignore-unwind-from-catch
 //
-//      This enables extra check before unwind, if it called from within catch
-//      block then it silently ignored (-fwasm-exceptions support)
+//      This enables additional check to be performed before unwinding. In
+//      cases where the unwind operation is triggered from the catch block,
+//      it will be silently ignored (-fwasm-exceptions support)
 //
 //   --pass-arg=asyncify-verbose
 //
@@ -342,6 +335,7 @@
 #include "ir/memory-utils.h"
 #include "ir/module-utils.h"
 #include "ir/names.h"
+#include "ir/parents.h"
 #include "ir/utils.h"
 #include "pass.h"
 #include "passes/pass-utils.h"
@@ -1158,15 +1152,17 @@ private:
         // here as well.
         results.push_back(makeCallSupport(curr));
         continue;
-      } else if (auto* iTry = curr->dynCast<Try>()) {
+      } else if (auto* try_ = curr->dynCast<Try>()) {
         if (item.phase == Work::Scan) {
           work.push_back(Work{curr, Work::Finish});
-          work.push_back(Work{iTry->body, Work::Scan});
+          work.push_back(Work{try_->body, Work::Scan});
+          // catchBodies are ignored because we assume that pause/resume will
+          // not happen inside them
           continue;
         }
-        iTry->body = results.back();
+        try_->body = results.back();
         results.pop_back();
-        results.push_back(iTry);
+        results.push_back(try_);
         continue;
       }
       // We must handle all control flow above, and all things that can change
@@ -1248,7 +1244,8 @@ private:
   }
 };
 
-// Add catch block counters to verify that unwind is not called from catch block
+// Add catch block counters to verify that unwind is not called from catch
+// block.
 struct AsyncifyAddCatchCounters : public Pass {
   bool isFunctionParallel() override { return true; }
 
@@ -1273,80 +1270,43 @@ struct AsyncifyAddCatchCounters : public Pass {
           makeBinary(SubInt32,
                      makeGlobalGet(ASYNCIFY_CATCH_COUNTER, Type::i32),
                      makeConst(int32_t(amount))));
-      };
-    };
-    CountersBuilder builder(*module_);
-    BranchUtils::BranchTargets branchTargets(func->body);
-
-    // with this walker we will assign count of enclosing catch block to
-    // each expression
-    // ... - 0
-    // catch
-    //   ... - 1
-    //   catch
-    //     ... - 2
-    std::unordered_map<Expression*, int> expressionCatchCount;
-    struct NestedLevelWalker
-      : public PostWalker<NestedLevelWalker,
-                          UnifiedExpressionVisitor<NestedLevelWalker>> {
-      std::unordered_map<Expression*, int>* expressionCatchCount;
-      int catchCount = 0;
-
-      static void doStartCatch(NestedLevelWalker* self, Expression** currp) {
-        self->catchCount++;
-      }
-
-      static void doEndCatch(NestedLevelWalker* self, Expression** currp) {
-        self->catchCount--;
-      }
-
-      static void scan(NestedLevelWalker* self, Expression** currp) {
-        auto curr = *currp;
-        if (curr->_id == Expression::Id::TryId) {
-          self->expressionCatchCount->insert(
-            std::make_pair<>(curr, self->catchCount));
-          auto& catchBodies = curr->cast<Try>()->catchBodies;
-          for (Index i = 0; i < catchBodies.size(); i++) {
-            self->expressionCatchCount->insert(
-              std::make_pair<>(catchBodies[i], self->catchCount));
-            self->pushTask(doEndCatch, currp);
-            self->pushTask(NestedLevelWalker::scan, &catchBodies[i]);
-            self->pushTask(doStartCatch, currp);
-          }
-          self->pushTask(NestedLevelWalker::scan, &curr->cast<Try>()->body);
-          return;
-        }
-
-        PostWalker<NestedLevelWalker,
-                   UnifiedExpressionVisitor<NestedLevelWalker>>::scan(self,
-                                                                      currp);
-      }
-
-      void visitExpression(Expression* curr) {
-        expressionCatchCount->insert(std::make_pair<>(curr, catchCount));
       }
     };
-    NestedLevelWalker nestedLevelWalker;
-    nestedLevelWalker.expressionCatchCount = &expressionCatchCount;
-    nestedLevelWalker.walk(func->body);
 
     // with this walker we will handle those changes of counter:
-    // - entering into catch (= pop)  +1
-    // - return                       -1
-    // - break                        -1
-    // - exiting from catch           -1
+    // - entering top-level catch (= pop)           +1
+    // - entering nested catch (= pop)               0 (ignored)
+    //
+    // - return inside top-level/nested catch       -1
+    // - return outside top-level/nested catch       0 (ignored)
+    //
+    // - break target outside of top-level catch    -1
+    // - break target inside of top-level catch      0 (ignored)
+    // - break outside top-level/nested catch        0 (ignored)
+    //
+    // - exiting from top-level catch               -1
+    // - exiting from nested catch                   0 (ignored)
     struct AddCountersWalker : public PostWalker<AddCountersWalker> {
       Function* func;
       CountersBuilder* builder;
       BranchUtils::BranchTargets* branchTargets;
-      std::unordered_map<Expression*, int>* expressionCatchCount;
+      Parents* parents;
       int finallyNum = 0;
       int popNum = 0;
 
       int getCatchCount(Expression* expression) {
-        auto it = expressionCatchCount->find(expression);
-        assert(it != expressionCatchCount->end());
-        return it->second;
+        int catchCount = 0;
+        while (expression != func->body) {
+          auto parent = parents->getParent(expression);
+          if (auto* try_ = parent->dynCast<Try>()) {
+            if (try_->body != expression) {
+              catchCount++;
+            }
+          }
+          expression = parent;
+        }
+
+        return catchCount;
       }
 
       // Each catch block except catch_all should have pop instruction
@@ -1465,11 +1425,15 @@ struct AsyncifyAddCatchCounters : public Pass {
       }
     };
 
+    Parents parents(func->body);
+    CountersBuilder builder(*module_);
+    BranchUtils::BranchTargets branchTargets(func->body);
+
     AddCountersWalker addCountersWalker;
     addCountersWalker.func = func;
     addCountersWalker.builder = &builder;
     addCountersWalker.branchTargets = &branchTargets;
-    addCountersWalker.expressionCatchCount = &expressionCatchCount;
+    addCountersWalker.parents = &parents;
     addCountersWalker.walk(func->body);
 
     EHUtils::handleBlockNestedPops(func, *module_);
