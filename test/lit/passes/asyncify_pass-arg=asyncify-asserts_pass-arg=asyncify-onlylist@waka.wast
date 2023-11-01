@@ -11,9 +11,9 @@
 (module
   ;; CHECK:      (type $f (func))
   (type $f (func))
-  ;; CHECK:      (type $none_=>_i32 (func (result i32)))
+  ;; CHECK:      (type $1 (func (result i32)))
 
-  ;; CHECK:      (type $i32_=>_none (func (param i32)))
+  ;; CHECK:      (type $2 (func (param i32)))
 
   ;; CHECK:      (import "env" "import" (func $import))
   (import "env" "import" (func $import))
