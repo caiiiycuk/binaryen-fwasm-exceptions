@@ -50,16 +50,6 @@ ParseDefsCtx::makeTypeUse(Index pos,
   return it->second;
 }
 
-Result<> ParseDefsCtx::addFunc(Name,
-                               const std::vector<Name>&,
-                               ImportNames*,
-                               TypeUseT,
-                               std::optional<LocalsT>,
-                               Index pos) {
-  CHECK_ERR(withLoc(pos, irBuilder.visitEnd()));
-  return Ok{};
-}
-
 Result<> ParseDefsCtx::addGlobal(Name,
                                  const std::vector<Name>&,
                                  ImportNames*,
@@ -69,6 +59,36 @@ Result<> ParseDefsCtx::addGlobal(Name,
   if (exp) {
     wasm.globals[index]->init = *exp;
   }
+  return Ok{};
+}
+
+Result<> ParseDefsCtx::addImplicitElems(Type,
+                                        std::vector<Expression*>&& elems) {
+  auto& e = wasm.elementSegments[implicitElemIndices.at(index)];
+  e->data = std::move(elems);
+  return Ok{};
+}
+
+Result<> ParseDefsCtx::addElem(Name,
+                               Name* table,
+                               std::optional<Expression*> offset,
+                               std::vector<Expression*>&& elems,
+                               Index pos) {
+  auto& e = wasm.elementSegments[index];
+  if (offset) {
+    e->offset = *offset;
+    if (table) {
+      e->table = *table;
+    } else if (wasm.tables.size() > 0) {
+      e->table = wasm.tables[0]->name;
+    } else {
+      return in.err(pos, "active element segment with no table");
+    }
+  } else {
+    e->offset = nullptr;
+    e->table = Name();
+  }
+  e->data = std::move(elems);
   return Ok{};
 }
 
@@ -83,7 +103,7 @@ Result<> ParseDefsCtx::addData(
     } else if (wasm.memories.size() > 0) {
       d->memory = wasm.memories[0]->name;
     } else {
-      return in.err(pos, "active segment with no memory");
+      return in.err(pos, "active data segment with no memory");
     }
   } else {
     d->isPassive = true;

@@ -2,20 +2,20 @@
 ;; RUN: wasm-opt %s -all --dae -S -o - | filecheck %s
 
 (module
- ;; CHECK:      (type ${} (sub (struct )))
- (type ${} (sub (struct)))
+ ;; CHECK:      (type $"{}" (sub (struct )))
+ (type $"{}" (sub (struct)))
 
- ;; CHECK:      (type $return_{} (func (result (ref ${}))))
- (type $return_{} (func (result (ref ${}))))
+ ;; CHECK:      (type $"return_{}" (func (result (ref $"{}"))))
+ (type $"return_{}" (func (result (ref $"{}"))))
 
- ;; CHECK:      (type ${i32} (sub ${} (struct (field i32))))
- (type ${i32} (sub ${} (struct (field i32))))
+ ;; CHECK:      (type $"{i32}" (sub $"{}" (struct (field i32))))
+ (type $"{i32}" (sub $"{}" (struct (field i32))))
 
- ;; CHECK:      (type ${i32_f32} (sub ${i32} (struct (field i32) (field f32))))
- (type ${i32_f32} (sub ${i32} (struct (field i32) (field f32))))
+ ;; CHECK:      (type $"{i32_f32}" (sub $"{i32}" (struct (field i32) (field f32))))
+ (type $"{i32_f32}" (sub $"{i32}" (struct (field i32) (field f32))))
 
- ;; CHECK:      (type ${i32_i64} (sub ${i32} (struct (field i32) (field i64))))
- (type ${i32_i64} (sub ${i32} (struct (field i32) (field i64))))
+ ;; CHECK:      (type $"{i32_i64}" (sub $"{i32}" (struct (field i32) (field i64))))
+ (type $"{i32_i64}" (sub $"{i32}" (struct (field i32) (field i64))))
 
  (table 1 1 funcref)
 
@@ -78,8 +78,12 @@
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (if (result i31ref)
  ;; CHECK-NEXT:   (i32.const 1)
- ;; CHECK-NEXT:   (call $refine-return-flow)
- ;; CHECK-NEXT:   (call $refine-return-flow)
+ ;; CHECK-NEXT:   (then
+ ;; CHECK-NEXT:    (call $refine-return-flow)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (else
+ ;; CHECK-NEXT:    (call $refine-return-flow)
+ ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT: )
  (func $call-refine-return-flow (result anyref)
@@ -91,8 +95,12 @@
   ;; function's return value.
   (if (result anyref)
    (i32.const 1)
-   (call $refine-return-flow)
-   (call $refine-return-flow)
+   (then
+    (call $refine-return-flow)
+   )
+   (else
+    (call $refine-return-flow)
+   )
   )
  )
 
@@ -125,14 +133,18 @@
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (if
  ;; CHECK-NEXT:   (i32.const 1)
- ;; CHECK-NEXT:   (return
- ;; CHECK-NEXT:    (local.get $i31)
+ ;; CHECK-NEXT:   (then
+ ;; CHECK-NEXT:    (return
+ ;; CHECK-NEXT:     (local.get $i31)
+ ;; CHECK-NEXT:    )
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (if
  ;; CHECK-NEXT:   (i32.const 2)
- ;; CHECK-NEXT:   (return
- ;; CHECK-NEXT:    (local.get $i31)
+ ;; CHECK-NEXT:   (then
+ ;; CHECK-NEXT:    (return
+ ;; CHECK-NEXT:     (local.get $i31)
+ ;; CHECK-NEXT:    )
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (local.get $i31)
@@ -145,11 +157,15 @@
 
   (if
    (i32.const 1)
-   (return (local.get $i31))
+   (then
+    (return (local.get $i31))
+   )
   )
   (if
    (i32.const 2)
-   (return (local.get $i31))
+   (then
+    (return (local.get $i31))
+   )
   )
   (local.get $i31)
  )
@@ -163,14 +179,18 @@
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (if
  ;; CHECK-NEXT:   (i32.const 1)
- ;; CHECK-NEXT:   (return
- ;; CHECK-NEXT:    (local.get $i31)
+ ;; CHECK-NEXT:   (then
+ ;; CHECK-NEXT:    (return
+ ;; CHECK-NEXT:     (local.get $i31)
+ ;; CHECK-NEXT:    )
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (if
  ;; CHECK-NEXT:   (i32.const 2)
- ;; CHECK-NEXT:   (return
- ;; CHECK-NEXT:    (local.get $struct)
+ ;; CHECK-NEXT:   (then
+ ;; CHECK-NEXT:    (return
+ ;; CHECK-NEXT:     (local.get $struct)
+ ;; CHECK-NEXT:    )
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (local.get $i31)
@@ -184,12 +204,16 @@
 
   (if
    (i32.const 1)
-   (return (local.get $i31))
+   (then
+    (return (local.get $i31))
+   )
   )
   (if
    (i32.const 2)
    ;; The refined return type has to be a supertype of struct.
-   (return (local.get $struct))
+   (then
+    (return (local.get $struct))
+   )
   )
   (local.get $i31)
  )
@@ -203,14 +227,18 @@
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (if
  ;; CHECK-NEXT:   (i32.const 1)
- ;; CHECK-NEXT:   (return
- ;; CHECK-NEXT:    (local.get $i31)
+ ;; CHECK-NEXT:   (then
+ ;; CHECK-NEXT:    (return
+ ;; CHECK-NEXT:     (local.get $i31)
+ ;; CHECK-NEXT:    )
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (if
  ;; CHECK-NEXT:   (i32.const 2)
- ;; CHECK-NEXT:   (return
- ;; CHECK-NEXT:    (local.get $i31)
+ ;; CHECK-NEXT:   (then
+ ;; CHECK-NEXT:    (return
+ ;; CHECK-NEXT:     (local.get $i31)
+ ;; CHECK-NEXT:    )
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (local.get $struct)
@@ -224,11 +252,15 @@
 
   (if
    (i32.const 1)
-   (return (local.get $i31))
+   (then
+    (return (local.get $i31))
+   )
   )
   (if
    (i32.const 2)
-   (return (local.get $i31))
+   (then
+    (return (local.get $i31))
+   )
   )
   ;; The refined return type has to be a supertype of struct.
   (local.get $struct)
@@ -239,11 +271,11 @@
  ;; CHECK-NEXT:  (local $temp anyref)
  ;; CHECK-NEXT:  (local $i31 i31ref)
  ;; CHECK-NEXT:  (local.set $temp
- ;; CHECK-NEXT:   (tuple.extract 0
+ ;; CHECK-NEXT:   (tuple.extract 2 0
  ;; CHECK-NEXT:    (call $refine-return-tuple)
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
- ;; CHECK-NEXT:  (tuple.make
+ ;; CHECK-NEXT:  (tuple.make 2
  ;; CHECK-NEXT:   (local.get $i31)
  ;; CHECK-NEXT:   (i32.const 1)
  ;; CHECK-NEXT:  )
@@ -253,12 +285,12 @@
   (local $i31 (ref null i31))
 
   (local.set $temp
-   (tuple.extract 0
+   (tuple.extract 2 0
     (call $refine-return-tuple)
    )
   )
 
-  (tuple.make
+  (tuple.make 2
    (local.get $i31)
    (i32.const 1)
   )
@@ -283,13 +315,13 @@
 
  ;; Show that we can optimize the return type of a function that does a tail
  ;; call.
- ;; CHECK:      (func $tail-callee (type $return_{}) (result (ref ${}))
+ ;; CHECK:      (func $tail-callee (type $"return_{}") (result (ref $"{}"))
  ;; CHECK-NEXT:  (unreachable)
  ;; CHECK-NEXT: )
- (func $tail-callee (result (ref ${}))
+ (func $tail-callee (result (ref $"{}"))
   (unreachable)
  )
- ;; CHECK:      (func $tail-caller-yes (type $return_{}) (result (ref ${}))
+ ;; CHECK:      (func $tail-caller-yes (type $"return_{}") (result (ref $"{}"))
  ;; CHECK-NEXT:  (return_call $tail-callee)
  ;; CHECK-NEXT: )
  (func $tail-caller-yes (result anyref)
@@ -301,8 +333,10 @@
  ;; CHECK-NEXT:  (local $any anyref)
  ;; CHECK-NEXT:  (if
  ;; CHECK-NEXT:   (i32.const 1)
- ;; CHECK-NEXT:   (return
- ;; CHECK-NEXT:    (local.get $any)
+ ;; CHECK-NEXT:   (then
+ ;; CHECK-NEXT:    (return
+ ;; CHECK-NEXT:     (local.get $any)
+ ;; CHECK-NEXT:    )
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (return_call $tail-callee)
@@ -313,7 +347,9 @@
   ;; This function's return type cannot be refined because of another return
   ;; whose type prevents it.
   (if (i32.const 1)
-   (return (local.get $any))
+   (then
+    (return (local.get $any))
+   )
   )
   (return_call $tail-callee)
  )
@@ -336,29 +372,31 @@
  )
 
  ;; As above, but with an indirect tail call.
- ;; CHECK:      (func $tail-callee-indirect (type $return_{}) (result (ref ${}))
+ ;; CHECK:      (func $tail-callee-indirect (type $"return_{}") (result (ref $"{}"))
  ;; CHECK-NEXT:  (unreachable)
  ;; CHECK-NEXT: )
- (func $tail-callee-indirect (result (ref ${}))
+ (func $tail-callee-indirect (result (ref $"{}"))
   (unreachable)
  )
- ;; CHECK:      (func $tail-caller-indirect-yes (type $return_{}) (result (ref ${}))
- ;; CHECK-NEXT:  (return_call_indirect $0 (type $return_{})
+ ;; CHECK:      (func $tail-caller-indirect-yes (type $"return_{}") (result (ref $"{}"))
+ ;; CHECK-NEXT:  (return_call_indirect $0 (type $"return_{}")
  ;; CHECK-NEXT:   (i32.const 0)
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT: )
  (func $tail-caller-indirect-yes (result anyref)
-  (return_call_indirect (type $return_{}) (i32.const 0))
+  (return_call_indirect (type $"return_{}") (i32.const 0))
  )
  ;; CHECK:      (func $tail-caller-indirect-no (type $2) (result anyref)
  ;; CHECK-NEXT:  (local $any anyref)
  ;; CHECK-NEXT:  (if
  ;; CHECK-NEXT:   (i32.const 1)
- ;; CHECK-NEXT:   (return
- ;; CHECK-NEXT:    (local.get $any)
+ ;; CHECK-NEXT:   (then
+ ;; CHECK-NEXT:    (return
+ ;; CHECK-NEXT:     (local.get $any)
+ ;; CHECK-NEXT:    )
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
- ;; CHECK-NEXT:  (return_call_indirect $0 (type $return_{})
+ ;; CHECK-NEXT:  (return_call_indirect $0 (type $"return_{}")
  ;; CHECK-NEXT:   (i32.const 0)
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT: )
@@ -366,9 +404,11 @@
   (local $any anyref)
 
   (if (i32.const 1)
-   (return (local.get $any))
+   (then
+    (return (local.get $any))
+   )
   )
-  (return_call_indirect (type $return_{}) (i32.const 0))
+  (return_call_indirect (type $"return_{}") (i32.const 0))
  )
  ;; CHECK:      (func $tail-call-caller-indirect (type $4)
  ;; CHECK-NEXT:  (drop
@@ -388,44 +428,48 @@
  )
 
  ;; As above, but with a tail call by function reference.
- ;; CHECK:      (func $tail-callee-call_ref (type $return_{}) (result (ref ${}))
+ ;; CHECK:      (func $tail-callee-call_ref (type $"return_{}") (result (ref $"{}"))
  ;; CHECK-NEXT:  (unreachable)
  ;; CHECK-NEXT: )
- (func $tail-callee-call_ref (result (ref ${}))
+ (func $tail-callee-call_ref (result (ref $"{}"))
   (unreachable)
  )
- ;; CHECK:      (func $tail-caller-call_ref-yes (type $return_{}) (result (ref ${}))
- ;; CHECK-NEXT:  (local $return_{} (ref null $return_{}))
- ;; CHECK-NEXT:  (return_call_ref $return_{}
- ;; CHECK-NEXT:   (local.get $return_{})
+ ;; CHECK:      (func $tail-caller-call_ref-yes (type $"return_{}") (result (ref $"{}"))
+ ;; CHECK-NEXT:  (local $"return_{}" (ref null $"return_{}"))
+ ;; CHECK-NEXT:  (return_call_ref $"return_{}"
+ ;; CHECK-NEXT:   (local.get $"return_{}")
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT: )
  (func $tail-caller-call_ref-yes (result anyref)
-  (local $return_{} (ref null $return_{}))
+  (local $"return_{}" (ref null $"return_{}"))
 
-  (return_call_ref $return_{} (local.get $return_{}))
+  (return_call_ref $"return_{}" (local.get $"return_{}"))
  )
  ;; CHECK:      (func $tail-caller-call_ref-no (type $2) (result anyref)
  ;; CHECK-NEXT:  (local $any anyref)
- ;; CHECK-NEXT:  (local $return_{} (ref null $return_{}))
+ ;; CHECK-NEXT:  (local $"return_{}" (ref null $"return_{}"))
  ;; CHECK-NEXT:  (if
  ;; CHECK-NEXT:   (i32.const 1)
- ;; CHECK-NEXT:   (return
- ;; CHECK-NEXT:    (local.get $any)
+ ;; CHECK-NEXT:   (then
+ ;; CHECK-NEXT:    (return
+ ;; CHECK-NEXT:     (local.get $any)
+ ;; CHECK-NEXT:    )
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
- ;; CHECK-NEXT:  (return_call_ref $return_{}
- ;; CHECK-NEXT:   (local.get $return_{})
+ ;; CHECK-NEXT:  (return_call_ref $"return_{}"
+ ;; CHECK-NEXT:   (local.get $"return_{}")
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT: )
  (func $tail-caller-call_ref-no (result anyref)
   (local $any anyref)
-  (local $return_{} (ref null $return_{}))
+  (local $"return_{}" (ref null $"return_{}"))
 
   (if (i32.const 1)
-   (return (local.get $any))
+   (then
+    (return (local.get $any))
+   )
   )
-  (return_call_ref $return_{} (local.get $return_{}))
+  (return_call_ref $"return_{}" (local.get $"return_{}"))
  )
  ;; CHECK:      (func $tail-caller-call_ref-unreachable (type $2) (result anyref)
  ;; CHECK-NEXT:  (block ;; (replaces something unreachable we can't emit)
@@ -438,7 +482,7 @@
  (func $tail-caller-call_ref-unreachable (result anyref)
   ;; An unreachable means there is no function signature to even look at. We
   ;; should not hit an assertion on such things.
-  (return_call_ref $return_{} (unreachable))
+  (return_call_ref $"return_{}" (unreachable))
  )
  ;; CHECK:      (func $tail-call-caller-call_ref (type $4)
  ;; CHECK-NEXT:  (drop
@@ -463,34 +507,50 @@
   )
  )
 
- ;; CHECK:      (func $update-null (type $10) (param $x i32) (param $y i32) (result (ref null ${i32}))
+ ;; CHECK:      (func $update-null (type $10) (param $x i32) (param $y i32) (result (ref null $"{i32}"))
  ;; CHECK-NEXT:  (if
  ;; CHECK-NEXT:   (local.get $x)
- ;; CHECK-NEXT:   (if
- ;; CHECK-NEXT:    (local.get $y)
- ;; CHECK-NEXT:    (return
- ;; CHECK-NEXT:     (struct.new_default ${i32_f32})
- ;; CHECK-NEXT:    )
- ;; CHECK-NEXT:    (return
- ;; CHECK-NEXT:     (ref.null none)
+ ;; CHECK-NEXT:   (then
+ ;; CHECK-NEXT:    (if
+ ;; CHECK-NEXT:     (local.get $y)
+ ;; CHECK-NEXT:     (then
+ ;; CHECK-NEXT:      (return
+ ;; CHECK-NEXT:       (struct.new_default $"{i32_f32}")
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (else
+ ;; CHECK-NEXT:      (return
+ ;; CHECK-NEXT:       (ref.null none)
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:     )
  ;; CHECK-NEXT:    )
  ;; CHECK-NEXT:   )
- ;; CHECK-NEXT:   (return
- ;; CHECK-NEXT:    (struct.new_default ${i32_i64})
+ ;; CHECK-NEXT:   (else
+ ;; CHECK-NEXT:    (return
+ ;; CHECK-NEXT:     (struct.new_default $"{i32_i64}")
+ ;; CHECK-NEXT:    )
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT: )
  (func $update-null (param $x i32) (param $y i32) (result anyref)
   ;; Of the three returns here, the null can be updated, and the LUB is
-  ;; determined by the other two, and is their shared parent ${}.
+  ;; determined by the other two, and is their shared parent $"{}."
   (if
    (local.get $x)
-   (if
-    (local.get $y)
-    (return (struct.new ${i32_f32}))
-    (return (ref.null any))
+   (then
+    (if
+     (local.get $y)
+     (then
+      (return (struct.new_default $"{i32_f32}"))
+     )
+     (else
+      (return (ref.null any))
+     )
+    )
    )
-   (return (struct.new ${i32_i64}))
+   (else
+    (return (struct.new_default $"{i32_i64}"))
+   )
   )
  )
 
@@ -510,12 +570,12 @@
   ;; Call $update-null so it gets optimized. (Call it with various values so
   ;; that other opts do not inline the constants.)
   (drop
-   ($call $update-null
+   (call $update-null
     (i32.const 0)
     (i32.const 1)
    )
   )
-  ($call $update-null
+  (call $update-null
    (i32.const 1)
    (i32.const 0)
   )

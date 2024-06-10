@@ -80,7 +80,7 @@ public:
     return builder.makeConstantExpression(values);
   }
 
-  bool breaking() { return breakTo.is(); }
+  bool breaking() const { return breakTo.is(); }
 
   void clearIf(Name target) {
     if (breakTo == target) {
@@ -1392,7 +1392,9 @@ public:
   Flow visitTableSize(TableSize* curr) { WASM_UNREACHABLE("unimp"); }
   Flow visitTableGrow(TableGrow* curr) { WASM_UNREACHABLE("unimp"); }
   Flow visitTableFill(TableFill* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitTableCopy(TableCopy* curr) { WASM_UNREACHABLE("unimp"); }
   Flow visitTry(Try* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitTryTable(TryTable* curr) { WASM_UNREACHABLE("unimp"); }
   Flow visitThrow(Throw* curr) {
     NOTE_ENTER("Throw");
     Literals arguments;
@@ -1410,6 +1412,7 @@ public:
     WASM_UNREACHABLE("throw");
   }
   Flow visitRethrow(Rethrow* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitThrowRef(ThrowRef* curr) { WASM_UNREACHABLE("unimp"); }
   Flow visitRefI31(RefI31* curr) {
     NOTE_ENTER("RefI31");
     Flow flow = visit(curr->value);
@@ -1899,7 +1902,21 @@ public:
   Flow visitStringConst(StringConst* curr) {
     return Literal(curr->string.toString());
   }
-  Flow visitStringMeasure(StringMeasure* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitStringMeasure(StringMeasure* curr) {
+    // For now we only support JS-style strings.
+    assert(curr->op == StringMeasureWTF16View);
+
+    Flow flow = visit(curr->ref);
+    if (flow.breaking()) {
+      return flow;
+    }
+    auto value = flow.getSingleValue();
+    auto data = value.getGCData();
+    if (!data) {
+      trap("null ref");
+    }
+    return Literal(int32_t(data->values.size()));
+  }
   Flow visitStringEncode(StringEncode* curr) { WASM_UNREACHABLE("unimp"); }
   Flow visitStringConcat(StringConcat* curr) { WASM_UNREACHABLE("unimp"); }
   Flow visitStringEq(StringEq* curr) {
@@ -1968,11 +1985,49 @@ public:
     }
     return Literal(result);
   }
-  Flow visitStringAs(StringAs* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitStringAs(StringAs* curr) {
+    // For now we only support JS-style strings.
+    assert(curr->op == StringAsWTF16);
+
+    Flow flow = visit(curr->ref);
+    if (flow.breaking()) {
+      return flow;
+    }
+    auto value = flow.getSingleValue();
+    auto data = value.getGCData();
+    if (!data) {
+      trap("null ref");
+    }
+
+    // A JS-style string can be viewed simply as the underlying data. All we
+    // need to do is fix up the type.
+    return Literal(data, curr->type.getHeapType());
+  }
   Flow visitStringWTF8Advance(StringWTF8Advance* curr) {
     WASM_UNREACHABLE("unimp");
   }
-  Flow visitStringWTF16Get(StringWTF16Get* curr) { WASM_UNREACHABLE("unimp"); }
+  Flow visitStringWTF16Get(StringWTF16Get* curr) {
+    NOTE_ENTER("StringEq");
+    Flow ref = visit(curr->ref);
+    if (ref.breaking()) {
+      return ref;
+    }
+    Flow pos = visit(curr->pos);
+    if (pos.breaking()) {
+      return pos;
+    }
+    auto refValue = ref.getSingleValue();
+    auto data = refValue.getGCData();
+    if (!data) {
+      trap("null ref");
+    }
+    auto& values = data->values;
+    Index i = pos.getSingleValue().geti32();
+    if (i >= values.size()) {
+      trap("string oob");
+    }
+    return Literal(values[i].geti32());
+  }
   Flow visitStringIterNext(StringIterNext* curr) { WASM_UNREACHABLE("unimp"); }
   Flow visitStringIterMove(StringIterMove* curr) { WASM_UNREACHABLE("unimp"); }
   Flow visitStringSliceWTF(StringSliceWTF* curr) { WASM_UNREACHABLE("unimp"); }
@@ -2210,6 +2265,10 @@ public:
     NOTE_ENTER("TableFill");
     return Flow(NONCONSTANT_FLOW);
   }
+  Flow visitTableCopy(TableCopy* curr) {
+    NOTE_ENTER("TableCopy");
+    return Flow(NONCONSTANT_FLOW);
+  }
   Flow visitLoad(Load* curr) {
     NOTE_ENTER("Load");
     return Flow(NONCONSTANT_FLOW);
@@ -2342,6 +2401,8 @@ public:
     }
     return ExpressionRunner<SubType>::visitRefAs(curr);
   }
+  Flow visitContNew(ContNew* curr) { WASM_UNREACHABLE("unimplemented"); }
+  Flow visitResume(Resume* curr) { WASM_UNREACHABLE("unimplemented"); }
 
   void trap(const char* why) override { throw NonconstantException(); }
 
@@ -2635,7 +2696,8 @@ private:
   // stack traces.
   std::vector<Name> functionStack;
 
-  std::unordered_set<Name> droppedSegments;
+  std::unordered_set<Name> droppedDataSegments;
+  std::unordered_set<Name> droppedElementSegments;
 
   struct TableInterfaceInfo {
     // The external interface in which the table is defined.
@@ -2685,6 +2747,8 @@ private:
         Flow ret = self()->visit(segment->data[i]);
         extInterface->tableStore(tableName, offset + i, ret.getSingleValue());
       }
+
+      droppedElementSegments.insert(segment->name);
     });
   }
 
@@ -3025,6 +3089,57 @@ public:
       info.interface->tableStore(info.name, dest + i, value);
     }
     return Flow();
+  }
+
+  Flow visitTableCopy(TableCopy* curr) {
+    NOTE_ENTER("TableCopy");
+    Flow dest = self()->visit(curr->dest);
+    if (dest.breaking()) {
+      return dest;
+    }
+    Flow source = self()->visit(curr->source);
+    if (source.breaking()) {
+      return source;
+    }
+    Flow size = self()->visit(curr->size);
+    if (size.breaking()) {
+      return size;
+    }
+    NOTE_EVAL1(dest);
+    NOTE_EVAL1(source);
+    NOTE_EVAL1(size);
+    Address destVal(dest.getSingleValue().getUnsigned());
+    Address sourceVal(source.getSingleValue().getUnsigned());
+    Address sizeVal(size.getSingleValue().getUnsigned());
+
+    auto destInfo = getTableInterfaceInfo(curr->destTable);
+    auto sourceInfo = getTableInterfaceInfo(curr->sourceTable);
+    auto destTableSize = destInfo.interface->tableSize(destInfo.name);
+    auto sourceTableSize = sourceInfo.interface->tableSize(sourceInfo.name);
+    if (sourceVal + sizeVal > sourceTableSize ||
+        destVal + sizeVal > destTableSize ||
+        // FIXME: better/cheaper way to detect wrapping?
+        sourceVal + sizeVal < sourceVal || sourceVal + sizeVal < sizeVal ||
+        destVal + sizeVal < destVal || destVal + sizeVal < sizeVal) {
+      trap("out of bounds segment access in table.copy");
+    }
+
+    int64_t start = 0;
+    int64_t end = sizeVal;
+    int step = 1;
+    // Reverse direction if source is below dest
+    if (sourceVal < destVal) {
+      start = int64_t(sizeVal) - 1;
+      end = -1;
+      step = -1;
+    }
+    for (int64_t i = start; i != end; i += step) {
+      destInfo.interface->tableStore(
+        destInfo.name,
+        destVal + i,
+        sourceInfo.interface->tableLoad(sourceInfo.name, sourceVal + i));
+    }
+    return {};
   }
 
   Flow visitLocalGet(LocalGet* curr) {
@@ -3518,7 +3633,7 @@ public:
     Address offsetVal(uint32_t(offset.getSingleValue().geti32()));
     Address sizeVal(uint32_t(size.getSingleValue().geti32()));
 
-    if (offsetVal + sizeVal > 0 && droppedSegments.count(curr->segment)) {
+    if (offsetVal + sizeVal > 0 && droppedDataSegments.count(curr->segment)) {
       trap("out of bounds segment access in memory.init");
     }
     if ((uint64_t)offsetVal + sizeVal > segment->data.size()) {
@@ -3540,7 +3655,7 @@ public:
   }
   Flow visitDataDrop(DataDrop* curr) {
     NOTE_ENTER("DataDrop");
-    droppedSegments.insert(curr->segment);
+    droppedDataSegments.insert(curr->segment);
     return {};
   }
   Flow visitMemoryCopy(MemoryCopy* curr) {
@@ -3656,7 +3771,7 @@ public:
     const auto& seg = *wasm.getDataSegment(curr->segment);
     auto elemBytes = element.getByteSize();
     auto end = offset + size * elemBytes;
-    if ((size != 0ull && droppedSegments.count(curr->segment)) ||
+    if ((size != 0ull && droppedDataSegments.count(curr->segment)) ||
         end > seg.data.size()) {
       trap("out of bounds segment access in array.new_data");
     }
@@ -3685,8 +3800,10 @@ public:
 
     const auto& seg = *wasm.getElementSegment(curr->segment);
     auto end = offset + size;
-    // TODO: Handle dropped element segments once we support those.
     if (end > seg.data.size()) {
+      trap("out of bounds segment access in array.new_elem");
+    }
+    if (end > 0 && droppedElementSegments.count(curr->segment)) {
       trap("out of bounds segment access in array.new_elem");
     }
     contents.reserve(size);
@@ -3736,7 +3853,7 @@ public:
     if (offsetVal + readSize > seg->data.size()) {
       trap("out of bounds segment access in array.init_data");
     }
-    if (offsetVal + sizeVal > 0 && droppedSegments.count(curr->segment)) {
+    if (offsetVal + sizeVal > 0 && droppedDataSegments.count(curr->segment)) {
       trap("out of bounds segment access in array.init_data");
     }
     for (size_t i = 0; i < sizeVal; i++) {
@@ -3779,11 +3896,13 @@ public:
     Module& wasm = *self()->getModule();
 
     auto* seg = wasm.getElementSegment(curr->segment);
-    if ((uint64_t)offsetVal + sizeVal > seg->data.size()) {
-      trap("out of bounds segment access in array.init");
+    auto max = (uint64_t)offsetVal + sizeVal;
+    if (max > seg->data.size()) {
+      trap("out of bounds segment access in array.init_elem");
     }
-    // TODO: Check whether the segment has been dropped once we support
-    // dropping element segments.
+    if (max > 0 && droppedElementSegments.count(curr->segment)) {
+      trap("out of bounds segment access in array.init_elem");
+    }
     for (size_t i = 0; i < sizeVal; i++) {
       // TODO: This is not correct because it does not preserve the identity
       // of references in the table! ArrayNew suffers the same problem.
@@ -3857,6 +3976,8 @@ public:
     multiValues.pop_back();
     return ret;
   }
+  Flow visitContNew(ContNew* curr) { return Flow(NONCONSTANT_FLOW); }
+  Flow visitResume(Resume* curr) { return Flow(NONCONSTANT_FLOW); }
 
   void trap(const char* why) override { externalInterface->trap(why); }
 

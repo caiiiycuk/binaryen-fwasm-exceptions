@@ -569,17 +569,25 @@
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (if (result (ref $struct))
   ;; CHECK-NEXT:    (i32.const 1)
-  ;; CHECK-NEXT:    (call $func-can-refine)
-  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:    (then
+  ;; CHECK-NEXT:     (call $func-can-refine)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (else
+  ;; CHECK-NEXT:     (unreachable)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (if (result (ref $struct))
   ;; CHECK-NEXT:    (i32.const 1)
-  ;; CHECK-NEXT:    (call_ref $sig-can-refine
-  ;; CHECK-NEXT:     (ref.func $func-can-refine)
+  ;; CHECK-NEXT:    (then
+  ;; CHECK-NEXT:     (call_ref $sig-can-refine
+  ;; CHECK-NEXT:      (ref.func $func-can-refine)
+  ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:    (else
+  ;; CHECK-NEXT:     (unreachable)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -590,18 +598,26 @@
     (drop
       (if (result anyref)
         (i32.const 1)
-        (call $func-can-refine)
-        (unreachable)
+        (then
+          (call $func-can-refine)
+        )
+        (else
+          (unreachable)
+        )
       )
     )
     ;; The same with a call_ref.
     (drop
       (if (result anyref)
         (i32.const 1)
-        (call_ref $sig-can-refine
-          (ref.func $func-can-refine)
+        (then
+          (call_ref $sig-can-refine
+            (ref.func $func-can-refine)
+          )
         )
-        (unreachable)
+        (else
+          (unreachable)
+        )
       )
     )
   )
@@ -641,8 +657,10 @@
   ;; CHECK:      (func $func-4 (type $sig) (result (ref null $struct))
   ;; CHECK-NEXT:  (if
   ;; CHECK-NEXT:   (i32.const 1)
-  ;; CHECK-NEXT:   (return
-  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:   (then
+  ;; CHECK-NEXT:    (return
+  ;; CHECK-NEXT:     (ref.null none)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (unreachable)
@@ -650,8 +668,10 @@
   (func $func-4 (type $sig) (result anyref)
     (if
       (i32.const 1)
-      (return
-        (ref.null any)
+      (then
+        (return
+          (ref.null any)
+        )
       )
     )
     (unreachable)
@@ -708,12 +728,12 @@
 )
 
 (module
-  ;; CHECK:      (type ${} (struct ))
-  (type ${} (struct))
+  ;; CHECK:      (type $"{}" (struct ))
+  (type $"{}" (struct))
 
-  ;; CHECK:      (type $1 (func (param (ref ${}) i32)))
+  ;; CHECK:      (type $1 (func (param (ref $"{}") i32)))
 
-  ;; CHECK:      (func $foo (type $1) (param $ref (ref ${})) (param $i32 i32)
+  ;; CHECK:      (func $foo (type $1) (param $ref (ref $"{}")) (param $i32 i32)
   ;; CHECK-NEXT:  (local $2 eqref)
   ;; CHECK-NEXT:  (local.set $2
   ;; CHECK-NEXT:   (local.get $ref)
@@ -732,19 +752,19 @@
   ;; CHECK-NEXT: )
   (func $foo (param $ref eqref) (param $i32 i32)
     (call $foo
-      ;; The only reference to the ${} type is in this block signature. Even
+      ;; The only reference to the $"{}" type is in this block signature. Even
       ;; this will go away in the internal ReFinalize (which makes the block
       ;; type unreachable).
-      (block (result (ref ${}))
+      (block (result (ref $"{}"))
         (unreachable)
       )
       (i32.const 0)
     )
     ;; Write something of type eqref into $ref. When we refine the type of the
-    ;; parameter from eqref to ${} we must do something here, as we can no
+    ;; parameter from eqref to $"{}" we must do something here, as we can no
     ;; longer just write this (ref.null eq) into a parameter of the more
     ;; refined type. While doing so, we must not be confused by the fact that
-    ;; the only mention of ${} in the original module gets removed during our
+    ;; the only mention of $"{}" in the original module gets removed during our
     ;; processing, as mentioned in the earlier comment. This is a regression
     ;; test for a crash because of that.
     (local.set $ref
@@ -853,25 +873,25 @@
 
 (module
  ;; CHECK:      (rec
- ;; CHECK-NEXT:  (type $0 (func (param (ref $[i8]))))
+ ;; CHECK-NEXT:  (type $0 (func (param (ref $"[i8]"))))
 
- ;; CHECK:       (type $[i8] (array i8))
- (type $[i8] (array i8))
+ ;; CHECK:       (type $"[i8]" (array i8))
+ (type $"[i8]" (array i8))
 
  ;; CHECK:       (type $2 (func))
 
  ;; CHECK:      (func $0 (type $2)
  ;; CHECK-NEXT:  (call $1
- ;; CHECK-NEXT:   (array.new_fixed $[i8] 0)
+ ;; CHECK-NEXT:   (array.new_fixed $"[i8]" 0)
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT: )
  (func $0
   (call $1
-   (array.new_fixed $[i8] 0)
+   (array.new_fixed $"[i8]" 0)
   )
  )
 
- ;; CHECK:      (func $1 (type $0) (param $2 (ref $[i8]))
+ ;; CHECK:      (func $1 (type $0) (param $2 (ref $"[i8]"))
  ;; CHECK-NEXT:  (drop
  ;; CHECK-NEXT:   (ref.cast (ref none)
  ;; CHECK-NEXT:    (local.get $2)
@@ -983,5 +1003,119 @@
  ;; CHECK-NEXT: )
  (func $other2 (type $return_A_2) (result (ref null $A))
   (struct.new $C) ;; this will allow this function's result to be refined to $C
+ )
+)
+
+;; Test we consider call.without.effects when deciding what to refine. $A has
+;; two subtypes, B1 and B2, and a call.without.effects sends in one while a
+;; normal call sends in the other. As a result, we cannot refine the parameter
+;; at all.
+(module
+ (rec
+  ;; CHECK:      (rec
+  ;; CHECK-NEXT:  (type $A (sub (struct )))
+  (type $A (sub (struct)))
+
+  ;; CHECK:       (type $B1 (sub $A (struct )))
+  (type $B1 (sub $A (struct)))
+
+  ;; CHECK:       (type $B2 (sub $A (struct )))
+  (type $B2 (sub $A (struct)))
+ )
+
+ ;; CHECK:      (type $3 (func (param (ref $A) funcref)))
+
+ ;; CHECK:      (type $4 (func))
+
+ ;; CHECK:      (type $5 (func (param (ref $A))))
+
+ ;; CHECK:      (import "binaryen-intrinsics" "call.without.effects" (func $no.side.effects (type $3) (param (ref $A) funcref)))
+ (import "binaryen-intrinsics" "call.without.effects" (func $no.side.effects
+   (param (ref $A))
+   (param funcref)
+ ))
+
+ ;; CHECK:      (elem declare func $target)
+
+ ;; CHECK:      (func $calls (type $4)
+ ;; CHECK-NEXT:  (call $no.side.effects
+ ;; CHECK-NEXT:   (struct.new_default $B1)
+ ;; CHECK-NEXT:   (ref.func $target)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (call $target
+ ;; CHECK-NEXT:   (struct.new_default $B2)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $calls
+  (call $no.side.effects
+   (struct.new $B1)
+   (ref.func $target)
+  )
+  (call $target
+   (struct.new $B2)
+  )
+ )
+
+ ;; CHECK:      (func $target (type $5) (param $x (ref $A))
+ ;; CHECK-NEXT:  (nop)
+ ;; CHECK-NEXT: )
+ (func $target (param $x (ref $A))
+  ;; Because of the two calls above, this cannot be refined.
+ )
+)
+
+;; As above, but now we can refine the parameter to the called function.
+(module
+ (rec
+  ;; CHECK:      (rec
+  ;; CHECK-NEXT:  (type $0 (func (param (ref $B))))
+
+  ;; CHECK:       (type $A (sub (struct )))
+  (type $A (sub (struct)))
+
+  ;; CHECK:       (type $B (sub $A (struct )))
+  (type $B (sub $A (struct)))
+ )
+
+ ;; CHECK:       (type $3 (func))
+
+ ;; CHECK:       (type $4 (func (param (ref $A) funcref)))
+
+ ;; CHECK:      (import "binaryen-intrinsics" "call.without.effects" (func $no.side.effects (type $4) (param (ref $A) funcref)))
+ (import "binaryen-intrinsics" "call.without.effects" (func $no.side.effects
+   (param (ref $A))
+   (param funcref)
+ ))
+
+ ;; CHECK:      (elem declare func $target)
+
+ ;; CHECK:      (func $calls (type $3)
+ ;; CHECK-NEXT:  (call $no.side.effects
+ ;; CHECK-NEXT:   (struct.new_default $B)
+ ;; CHECK-NEXT:   (ref.func $target)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (call $target
+ ;; CHECK-NEXT:   (struct.new_default $B)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $calls
+  (call $no.side.effects
+   (struct.new $B)        ;; this changed to $B
+   (ref.func $target)
+  )
+  (call $target
+   (struct.new $B)        ;; this also changed to $B
+  )
+ )
+
+ ;; CHECK:      (func $target (type $0) (param $x (ref $B))
+ ;; CHECK-NEXT:  (nop)
+ ;; CHECK-NEXT: )
+ (func $target (param $x (ref $A))
+  ;; The two calls above both send $B, so we can refine the parameter to $B.
+  ;;
+  ;; Note that the signature of the import $no.side.effects does *not* change;
+  ;; the refined values sent are valid to send to the old parameter types there
+  ;; (see tests above for how we handle refining of return values).
  )
 )

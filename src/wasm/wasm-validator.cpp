@@ -354,7 +354,8 @@ public:
         case Expression::ReturnId:
         case Expression::UnreachableId:
         case Expression::ThrowId:
-        case Expression::RethrowId: {
+        case Expression::RethrowId:
+        case Expression::ThrowRefId: {
           // These can all be unreachable without an unreachable child.
           return;
         }
@@ -441,11 +442,14 @@ public:
   void visitTableSize(TableSize* curr);
   void visitTableGrow(TableGrow* curr);
   void visitTableFill(TableFill* curr);
+  void visitTableCopy(TableCopy* curr);
   void noteDelegate(Name name, Expression* curr);
   void noteRethrow(Name name, Expression* curr);
   void visitTry(Try* curr);
+  void visitTryTable(TryTable* curr);
   void visitThrow(Throw* curr);
   void visitRethrow(Rethrow* curr);
+  void visitThrowRef(ThrowRef* curr);
   void visitTupleMake(TupleMake* curr);
   void visitTupleExtract(TupleExtract* curr);
   void visitCallRef(CallRef* curr);
@@ -483,6 +487,8 @@ public:
   void visitStringIterMove(StringIterMove* curr);
   void visitStringSliceWTF(StringSliceWTF* curr);
   void visitStringSliceIter(StringSliceIter* curr);
+  void visitContNew(ContNew* curr);
+  void visitResume(Resume* curr);
 
   void visitFunction(Function* curr);
 
@@ -2119,6 +2125,11 @@ void FunctionValidator::visitDrop(Drop* curr) {
                  curr->value->type == Type::unreachable,
                curr,
                "can only drop a valid value");
+  if (curr->value->type.isTuple()) {
+    shouldBeTrue(getModule()->features.hasMultivalue(),
+                 curr,
+                 "Tuples drops are not allowed unless multivalue is enabled");
+  }
 }
 
 void FunctionValidator::visitReturn(Return* curr) {
@@ -2315,6 +2326,27 @@ void FunctionValidator::visitTableFill(TableFill* curr) {
     curr->size->type, Type(Type::i32), curr, "table.fill size must be i32");
 }
 
+void FunctionValidator::visitTableCopy(TableCopy* curr) {
+  shouldBeTrue(getModule()->features.hasBulkMemory(),
+               curr,
+               "table.copy requires bulk-memory [--enable-bulk-memory]");
+  auto* sourceTable = getModule()->getTableOrNull(curr->sourceTable);
+  auto* destTable = getModule()->getTableOrNull(curr->destTable);
+  if (shouldBeTrue(!!sourceTable, curr, "table.copy source table must exist") &&
+      shouldBeTrue(!!destTable, curr, "table.copy dest table must exist")) {
+    shouldBeSubType(sourceTable->type,
+                    destTable->type,
+                    curr,
+                    "table.copy source must have right type for dest");
+  }
+  shouldBeEqualOrFirstIsUnreachable(
+    curr->dest->type, Type(Type::i32), curr, "table.copy dest must be i32");
+  shouldBeEqualOrFirstIsUnreachable(
+    curr->source->type, Type(Type::i32), curr, "table.copy source must be i32");
+  shouldBeEqualOrFirstIsUnreachable(
+    curr->size->type, Type(Type::i32), curr, "table.copy size must be i32");
+}
+
 void FunctionValidator::noteDelegate(Name name, Expression* curr) {
   if (name != DELEGATE_CALLER_TARGET) {
     shouldBeTrue(delegateTargetNames.count(name) != 0,
@@ -2420,6 +2452,78 @@ void FunctionValidator::visitTry(Try* curr) {
   rethrowTargetNames.erase(curr->name);
 }
 
+void FunctionValidator::visitTryTable(TryTable* curr) {
+  shouldBeTrue(
+    getModule()->features.hasExceptionHandling(),
+    curr,
+    "try_table requires exception-handling [--enable-exception-handling]");
+  if (curr->type != Type::unreachable) {
+    shouldBeSubType(curr->body->type,
+                    curr->type,
+                    curr->body,
+                    "try_table's type does not match try_table body's type");
+  }
+
+  shouldBeEqual(curr->catchTags.size(),
+                curr->catchDests.size(),
+                curr,
+                "the number of catch tags and catch destinations do not match");
+  shouldBeEqual(curr->catchTags.size(),
+                curr->catchRefs.size(),
+                curr,
+                "the number of catch tags and catch refs do not match");
+  shouldBeEqual(curr->catchTags.size(),
+                curr->sentTypes.size(),
+                curr,
+                "the number of catch tags and sent types do not match");
+
+  const char* invalidSentTypeMsg = "invalid catch sent type information";
+  Type exnref = Type(HeapType::exn, Nullable);
+  for (Index i = 0; i < curr->catchTags.size(); i++) {
+    auto sentType = curr->sentTypes[i];
+    size_t tagTypeSize;
+
+    Name tagName = curr->catchTags[i];
+    if (!tagName) { // catch_all or catch_all_ref
+      tagTypeSize = 0;
+    } else { // catch or catch_ref
+      // Check tag validity
+      auto* tag = getModule()->getTagOrNull(tagName);
+      if (!shouldBeTrue(tag != nullptr, curr, "")) {
+        getStream() << "catch's tag name is invalid: " << tagName << "\n";
+      } else if (!shouldBeEqual(tag->sig.results, Type(Type::none), curr, "")) {
+        getStream()
+          << "catch's tag (" << tagName
+          << ") has result values, which is not allowed for exception handling";
+      }
+
+      // tagType and sentType should be the same (except for the possible exnref
+      // at the end of sentType)
+      auto tagType = tag->sig.params;
+      tagTypeSize = tagType.size();
+      for (Index j = 0; j < tagType.size(); j++) {
+        shouldBeEqual(tagType[j], sentType[j], curr, invalidSentTypeMsg);
+      }
+    }
+
+    // If this is catch_ref or catch_all_ref, sentType.size() should be
+    // tagType.size() + 1 because there is an exrnef tacked at the end. If
+    // this is catch/catch_all, the two sizes should be the same.
+    if (curr->catchRefs[i]) {
+      if (shouldBeTrue(
+            sentType.size() == tagTypeSize + 1, curr, invalidSentTypeMsg)) {
+        shouldBeEqual(
+          sentType[sentType.size() - 1], exnref, curr, invalidSentTypeMsg);
+      }
+    } else {
+      shouldBeTrue(sentType.size() == tagTypeSize, curr, invalidSentTypeMsg);
+    }
+
+    // Note catch destinations with sent types
+    noteBreak(curr->catchDests[i], curr->sentTypes[i], curr);
+  }
+}
+
 void FunctionValidator::visitThrow(Throw* curr) {
   shouldBeTrue(
     getModule()->features.hasExceptionHandling(),
@@ -2441,9 +2545,10 @@ void FunctionValidator::visitThrow(Throw* curr) {
     Type(Type::none),
     curr,
     "tags with result types must not be used for exception handling");
-  if (!shouldBeTrue(curr->operands.size() == tag->sig.params.size(),
-                    curr,
-                    "tag's param numbers must match")) {
+  if (!shouldBeEqual(curr->operands.size(),
+                     tag->sig.params.size(),
+                     curr,
+                     "tag's param numbers must match")) {
     return;
   }
   size_t i = 0;
@@ -2492,6 +2597,14 @@ void FunctionValidator::visitTupleMake(TupleMake* curr) {
                   curr->type,
                   curr,
                   "Type of tuple.make does not match types of its operands");
+}
+
+void FunctionValidator::visitThrowRef(ThrowRef* curr) {
+  Type exnref = Type(HeapType::exn, Nullable);
+  shouldBeSubType(curr->exnref->type,
+                  exnref,
+                  curr,
+                  "throw_ref's argument should be a subtype of exnref");
 }
 
 void FunctionValidator::visitTupleExtract(TupleExtract* curr) {
@@ -2797,6 +2910,10 @@ void FunctionValidator::visitArrayNew(ArrayNew* curr) {
 void FunctionValidator::visitArrayNewData(ArrayNewData* curr) {
   visitArrayNew(curr);
 
+  shouldBeTrue(
+    getModule()->features.hasBulkMemory(),
+    curr,
+    "Data segment operations require bulk memory [--enable-bulk-memory]");
   if (!shouldBeTrue(getModule()->getDataSegment(curr->segment),
                     curr,
                     "array.new_data segment should exist")) {
@@ -2945,28 +3062,30 @@ void FunctionValidator::visitArrayCopy(ArrayCopy* curr) {
   if (curr->type == Type::unreachable) {
     return;
   }
-  if (!shouldBeSubType(curr->srcRef->type,
-                       Type(HeapType::array, Nullable),
-                       curr,
-                       "array.copy source should be an array reference")) {
+  if (!shouldBeTrue(curr->srcRef->type.isRef(),
+                    curr,
+                    "array.copy source should be a reference")) {
     return;
   }
-  if (!shouldBeSubType(curr->destRef->type,
-                       Type(HeapType::array, Nullable),
-                       curr,
-                       "array.copy destination should be an array reference")) {
+  if (!shouldBeTrue(curr->destRef->type.isRef(),
+                    curr,
+                    "array.copy destination should be a reference")) {
     return;
   }
   auto srcHeapType = curr->srcRef->type.getHeapType();
   auto destHeapType = curr->destRef->type.getHeapType();
-  if (srcHeapType == HeapType::none ||
-      !shouldBeTrue(srcHeapType.isArray(),
+  // Normally both types need to be references to specifc arrays, but if either
+  // of the types are bottom, we don't further constrain the other at all
+  // because this will be emitted as an unreachable.
+  if (srcHeapType.isBottom() || destHeapType.isBottom()) {
+    return;
+  }
+  if (!shouldBeTrue(srcHeapType.isArray(),
                     curr,
                     "array.copy source should be an array reference")) {
     return;
   }
-  if (destHeapType == HeapType::none ||
-      !shouldBeTrue(destHeapType.isArray(),
+  if (!shouldBeTrue(destHeapType.isArray(),
                     curr,
                     "array.copy destination should be an array reference")) {
     return;
@@ -3061,6 +3180,10 @@ void FunctionValidator::visitArrayInit(ArrayInit* curr) {
 void FunctionValidator::visitArrayInitData(ArrayInitData* curr) {
   visitArrayInit(curr);
 
+  shouldBeTrue(
+    getModule()->features.hasBulkMemory(),
+    curr,
+    "Data segment operations require bulk memory [--enable-bulk-memory]");
   shouldBeTrue(getModule()->getDataSegmentOrNull(curr->segment),
                curr,
                "array.init_data segment must exist");
@@ -3172,12 +3295,38 @@ void FunctionValidator::visitStringSliceIter(StringSliceIter* curr) {
                "string operations require reference-types [--enable-strings]");
 }
 
+void FunctionValidator::visitContNew(ContNew* curr) {
+  // TODO implement actual type-checking
+  shouldBeTrue(
+    !getModule() || getModule()->features.hasTypedContinuations(),
+    curr,
+    "cont.new requires typed-continuatons [--enable-typed-continuations]");
+
+  shouldBeTrue((curr->contType.isContinuation() &&
+                curr->contType.getContinuation().type.isSignature()),
+               curr,
+               "invalid type in ContNew expression");
+}
+
+void FunctionValidator::visitResume(Resume* curr) {
+  // TODO implement actual type-checking
+  shouldBeTrue(
+    !getModule() || getModule()->features.hasTypedContinuations(),
+    curr,
+    "resume requires typed-continuatons [--enable-typed-continuations]");
+
+  shouldBeTrue(
+    curr->sentTypes.size() == curr->handlerBlocks.size(),
+    curr,
+    "sentTypes cache in Resume instruction has not been initialized");
+
+  shouldBeTrue((curr->contType.isContinuation() &&
+                curr->contType.getContinuation().type.isSignature()),
+               curr,
+               "invalid type in Resume expression");
+}
+
 void FunctionValidator::visitFunction(Function* curr) {
-  if (curr->getResults().isTuple()) {
-    shouldBeTrue(getModule()->features.hasMultivalue(),
-                 curr->body,
-                 "Multivalue function results (multivalue is not enabled)");
-  }
   FeatureSet features;
   // Check for things like having a rec group with GC enabled. The type we're
   // checking is a reference type even if this an MVP function type, so ignore
@@ -3198,28 +3347,7 @@ void FunctionValidator::visitFunction(Function* curr) {
   shouldBeTrue(features <= getModule()->features,
                curr->name,
                "all used types should be allowed");
-  if (curr->profile == IRProfile::Poppy) {
-    shouldBeTrue(
-      curr->body->is<Block>(), curr->body, "Function body must be a block");
-  }
-  // if function has no result, it is ignored
-  // if body is unreachable, it might be e.g. a return
-  shouldBeSubType(curr->body->type,
-                  curr->getResults(),
-                  curr->body,
-                  "function body type must match, if function returns");
-  for (Type returnType : returnTypes) {
-    shouldBeSubType(returnType,
-                    curr->getResults(),
-                    curr->body,
-                    "function result must match, if function has returns");
-  }
 
-  assert(breakTypes.empty());
-  assert(delegateTargetNames.empty());
-  assert(rethrowTargetNames.empty());
-  returnTypes.clear();
-  labelNames.clear();
   // validate optional local names
   std::unordered_set<Name> seen;
   for (auto& pair : curr->localNames) {
@@ -3227,17 +3355,50 @@ void FunctionValidator::visitFunction(Function* curr) {
     shouldBeTrue(seen.insert(name).second, name, "local names must be unique");
   }
 
-  if (getModule()->features.hasGC()) {
-    // If we have non-nullable locals, verify that local.get are valid.
-    LocalStructuralDominance info(curr, *getModule());
-    for (auto index : info.nonDominatingIndices) {
-      auto localType = curr->getLocalType(index);
-      for (auto type : localType) {
-        shouldBeTrue(!type.isNonNullable(),
-                     index,
-                     "non-nullable local's sets must dominate gets");
+  if (curr->body) {
+    if (curr->getResults().isTuple()) {
+      shouldBeTrue(getModule()->features.hasMultivalue(),
+                   curr->body,
+                   "Multivalue function results (multivalue is not enabled)");
+    }
+    if (curr->profile == IRProfile::Poppy) {
+      shouldBeTrue(
+        curr->body->is<Block>(), curr->body, "Function body must be a block");
+    }
+    // if function has no result, it is ignored
+    // if body is unreachable, it might be e.g. a return
+    shouldBeSubType(curr->body->type,
+                    curr->getResults(),
+                    curr->body,
+                    "function body type must match, if function returns");
+    for (Type returnType : returnTypes) {
+      shouldBeSubType(returnType,
+                      curr->getResults(),
+                      curr->body,
+                      "function result must match, if function has returns");
+    }
+
+    if (getModule()->features.hasGC()) {
+      // If we have non-nullable locals, verify that local.get are valid.
+      LocalStructuralDominance info(curr, *getModule());
+      for (auto index : info.nonDominatingIndices) {
+        auto localType = curr->getLocalType(index);
+        for (auto type : localType) {
+          shouldBeTrue(!type.isNonNullable(),
+                       index,
+                       "non-nullable local's sets must dominate gets");
+        }
       }
     }
+
+    // Assert that we finished with a clean state after processing the body's
+    // expressions, and reset the state for next time. Note that we use some of
+    // this state in the above validations, so this must appear last.
+    assert(breakTypes.empty());
+    assert(delegateTargetNames.empty());
+    assert(rethrowTargetNames.empty());
+    returnTypes.clear();
+    labelNames.clear();
   }
 }
 
@@ -3524,7 +3685,6 @@ static void validateMemories(Module& module, ValidationInfo& info) {
 
 static void validateDataSegments(Module& module, ValidationInfo& info) {
   for (auto& segment : module.dataSegments) {
-    auto size = segment->data.size();
     if (segment->isPassive) {
       info.shouldBeTrue(
         module.features.hasBulkMemory(),
@@ -3561,14 +3721,6 @@ static void validateDataSegments(Module& module, ValidationInfo& info) {
         segment->offset,
         "memory segment offset should be constant");
       FunctionValidator(module, &info).validate(segment->offset);
-      // If the memory is imported we don't actually know its initial size.
-      // Specifically wasm dll's import a zero sized memory which is perfectly
-      // valid.
-      if (!memory->imported()) {
-        info.shouldBeTrue(size <= memory->initial * Memory::kPageSize,
-                          segment->data.size(),
-                          "segment size should fit in memory (initial)");
-      }
     }
   }
 }
@@ -3781,10 +3933,21 @@ bool WasmValidator::validate(Module& module, Flags flags) {
   info.validateGlobally = (flags & Globally) != 0;
   info.quiet = (flags & Quiet) != 0;
   info.closedWorld = (flags & ClosedWorld) != 0;
-  // parallel wasm logic validation
+
+  // Parallel function validation.
   PassRunner runner(&module);
-  FunctionValidator(module, &info).validate(&runner);
-  // validate globally
+  FunctionValidator functionValidator(module, &info);
+  functionValidator.validate(&runner);
+
+  // Also validate imports, which were not covered in the parallel traversal
+  // since it is a function-parallel operation.
+  for (auto& func : module.functions) {
+    if (func->imported()) {
+      functionValidator.visitFunction(func.get());
+    }
+  }
+
+  // Validate globally.
   if (info.validateGlobally) {
     validateImports(module, info);
     validateExports(module, info);
@@ -3799,11 +3962,13 @@ bool WasmValidator::validate(Module& module, Flags flags) {
       validateClosedWorldInterface(module, info);
     }
   }
-  // validate additional internal IR details when in pass-debug mode
+
+  // Validate additional internal IR details when in pass-debug mode.
   if (PassRunner::getPassDebug()) {
     validateBinaryenIR(module, info);
   }
-  // print all the data
+
+  // Print all the data.
   if (!info.valid.load() && !info.quiet) {
     for (auto& func : module.functions) {
       std::cerr << info.getStream(func.get()).str();

@@ -24,8 +24,8 @@ instructions = [
     ("if",             "makeIf(s)"),
     ("then",           "makeThenOrElse(s)"),
     ("else",           "makeThenOrElse(s)"),
-    ("br",             "makeBreak(s)"),
-    ("br_if",          "makeBreak(s)"),
+    ("br",             "makeBreak(s, false)"),
+    ("br_if",          "makeBreak(s, true)"),
     ("br_table",       "makeBreakTable(s)"),
     ("return",         "makeReturn(s)"),
     ("call",           "makeCall(s, /*isReturn=*/false)"),
@@ -548,22 +548,27 @@ instructions = [
     ("table.size",           "makeTableSize(s)"),
     ("table.grow",           "makeTableGrow(s)"),
     ("table.fill",           "makeTableFill(s)"),
+    ("table.copy",           "makeTableCopy(s)"),
     # TODO:
     # table.init
-    # table.fill
-    # table.copy
     #
     # exception handling instructions
     ("try",                  "makeTry(s)"),
+    ("try_table",            "makeTryTable(s)"),
     ("throw",                "makeThrow(s)"),
     ("rethrow",              "makeRethrow(s)"),
+    ("throw_ref",            "makeThrowRef(s)"),
     # Multivalue pseudoinstructions
     ("tuple.make",           "makeTupleMake(s)"),
     ("tuple.extract",        "makeTupleExtract(s)"),
+    ("tuple.drop",           "makeTupleDrop(s)"),
     ("pop",                  "makePop(s)"),
     # Typed function references instructions
     ("call_ref",             "makeCallRef(s, /*isReturn=*/false)"),
     ("return_call_ref",      "makeCallRef(s, /*isReturn=*/true)"),
+    # Typed continuations instructions
+    ("cont.new",             "makeContNew(s)"),
+    ("resume",               "makeResume(s)"),
     # GC
     ("i31.new",              "makeRefI31(s)"),  # deprecated
     ("ref.i31",              "makeRefI31(s)"),
@@ -709,11 +714,14 @@ class Node:
 
 def instruction_parser(new_parser=False):
     """Build a trie out of all the instructions, then emit it as C++ code."""
+    global instructions
     trie = Node()
     inst_length = 0
     for inst, expr in instructions:
-        if new_parser and inst in {"then", "else"}:
-            # These are not real instructions! skip them.
+        if new_parser and inst in {"block", "loop", "if", "try", "then",
+                                   "else", "try_table"}:
+            # These are either control flow handled manually or not real
+            # instructions. Skip them.
             continue
         inst_length = max(inst_length, len(inst))
         trie.insert(inst, expr)
@@ -731,8 +739,8 @@ def instruction_parser(new_parser=False):
 
     def print_leaf(expr, inst):
         if new_parser:
-            expr = expr.replace("()", "(ctx, pos)")
-            expr = expr.replace("(s", "(ctx, pos")
+            expr = expr.replace("()", "(ctx, pos, annotations)")
+            expr = expr.replace("(s", "(ctx, pos, annotations")
             printer.print_line("if (op == \"{inst}\"sv) {{".format(inst=inst))
             with printer.indent():
                 printer.print_line("CHECK_ERR({expr});".format(expr=expr))

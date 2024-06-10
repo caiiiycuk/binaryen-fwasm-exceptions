@@ -4,7 +4,6 @@
 ;; RUN: foreach %s %t wasm-opt --asyncify --optimize-level=1 -S -o - | filecheck %s
 
 (module
-  (memory 1 2)
   ;; CHECK:      (type $0 (func))
 
   ;; CHECK:      (type $1 (func (param i32)))
@@ -19,6 +18,9 @@
   (import "env" "import2" (func $import2 (result i32)))
   ;; CHECK:      (import "env" "import3" (func $import3 (param i32)))
   (import "env" "import3" (func $import3 (param i32)))
+
+  (memory 1 2)
+
   ;; CHECK:      (global $__asyncify_state (mut i32) (i32.const 0))
 
   ;; CHECK:      (global $__asyncify_data (mut i32) (i32.const 0))
@@ -50,7 +52,7 @@
   ;; CHECK-NEXT:         (global.get $__asyncify_state)
   ;; CHECK-NEXT:         (i32.const 2)
   ;; CHECK-NEXT:        )
-  ;; CHECK-NEXT:        (block (result i32)
+  ;; CHECK-NEXT:        (then
   ;; CHECK-NEXT:         (i32.store
   ;; CHECK-NEXT:          (global.get $__asyncify_data)
   ;; CHECK-NEXT:          (i32.sub
@@ -66,11 +68,13 @@
   ;; CHECK-NEXT:          )
   ;; CHECK-NEXT:         )
   ;; CHECK-NEXT:        )
-  ;; CHECK-NEXT:        (local.get $0)
+  ;; CHECK-NEXT:        (else
+  ;; CHECK-NEXT:         (local.get $0)
+  ;; CHECK-NEXT:        )
   ;; CHECK-NEXT:       )
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (call $import)
   ;; CHECK-NEXT:      (drop
   ;; CHECK-NEXT:       (br_if $__asyncify_unwind
@@ -113,7 +117,7 @@
   ;; CHECK-NEXT:    (global.get $__asyncify_state)
   ;; CHECK-NEXT:    (i32.const 2)
   ;; CHECK-NEXT:   )
-  ;; CHECK-NEXT:   (block
+  ;; CHECK-NEXT:   (then
   ;; CHECK-NEXT:    (i32.store
   ;; CHECK-NEXT:     (global.get $__asyncify_data)
   ;; CHECK-NEXT:     (i32.sub
@@ -145,7 +149,7 @@
   ;; CHECK-NEXT:         (global.get $__asyncify_state)
   ;; CHECK-NEXT:         (i32.const 2)
   ;; CHECK-NEXT:        )
-  ;; CHECK-NEXT:        (block (result i32)
+  ;; CHECK-NEXT:        (then
   ;; CHECK-NEXT:         (i32.store
   ;; CHECK-NEXT:          (global.get $__asyncify_data)
   ;; CHECK-NEXT:          (i32.sub
@@ -161,11 +165,13 @@
   ;; CHECK-NEXT:          )
   ;; CHECK-NEXT:         )
   ;; CHECK-NEXT:        )
-  ;; CHECK-NEXT:        (local.get $1)
+  ;; CHECK-NEXT:        (else
+  ;; CHECK-NEXT:         (local.get $1)
+  ;; CHECK-NEXT:        )
   ;; CHECK-NEXT:       )
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (local.set $1
   ;; CHECK-NEXT:       (call $import2)
   ;; CHECK-NEXT:      )
@@ -187,8 +193,10 @@
   ;; CHECK-NEXT:     (i32.eqz
   ;; CHECK-NEXT:      (global.get $__asyncify_state)
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (return
-  ;; CHECK-NEXT:      (local.get $0)
+  ;; CHECK-NEXT:     (then
+  ;; CHECK-NEXT:      (return
+  ;; CHECK-NEXT:       (local.get $0)
+  ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (unreachable)
@@ -246,7 +254,7 @@
   ;; CHECK-NEXT:         (global.get $__asyncify_state)
   ;; CHECK-NEXT:         (i32.const 2)
   ;; CHECK-NEXT:        )
-  ;; CHECK-NEXT:        (block (result i32)
+  ;; CHECK-NEXT:        (then
   ;; CHECK-NEXT:         (i32.store
   ;; CHECK-NEXT:          (global.get $__asyncify_data)
   ;; CHECK-NEXT:          (i32.sub
@@ -262,11 +270,13 @@
   ;; CHECK-NEXT:          )
   ;; CHECK-NEXT:         )
   ;; CHECK-NEXT:        )
-  ;; CHECK-NEXT:        (local.get $0)
+  ;; CHECK-NEXT:        (else
+  ;; CHECK-NEXT:         (local.get $0)
+  ;; CHECK-NEXT:        )
   ;; CHECK-NEXT:       )
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (drop
   ;; CHECK-NEXT:       (call $import2)
   ;; CHECK-NEXT:      )
@@ -321,7 +331,7 @@
   ;; CHECK-NEXT:    (global.get $__asyncify_state)
   ;; CHECK-NEXT:    (i32.const 2)
   ;; CHECK-NEXT:   )
-  ;; CHECK-NEXT:   (block
+  ;; CHECK-NEXT:   (then
   ;; CHECK-NEXT:    (i32.store
   ;; CHECK-NEXT:     (global.get $__asyncify_data)
   ;; CHECK-NEXT:     (i32.sub
@@ -347,7 +357,7 @@
   ;; CHECK-NEXT:      (global.get $__asyncify_state)
   ;; CHECK-NEXT:      (i32.const 2)
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (i32.store
   ;; CHECK-NEXT:       (global.get $__asyncify_data)
   ;; CHECK-NEXT:       (i32.sub
@@ -370,15 +380,17 @@
   ;; CHECK-NEXT:     (i32.eqz
   ;; CHECK-NEXT:      (global.get $__asyncify_state)
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (loop $l
-  ;; CHECK-NEXT:      (br_if $l
-  ;; CHECK-NEXT:       (local.tee $1
-  ;; CHECK-NEXT:        (i32.div_s
-  ;; CHECK-NEXT:         (i32.add
-  ;; CHECK-NEXT:          (local.get $1)
-  ;; CHECK-NEXT:          (i32.const 1)
+  ;; CHECK-NEXT:     (then
+  ;; CHECK-NEXT:      (loop $l
+  ;; CHECK-NEXT:       (br_if $l
+  ;; CHECK-NEXT:        (local.tee $1
+  ;; CHECK-NEXT:         (i32.div_s
+  ;; CHECK-NEXT:          (i32.add
+  ;; CHECK-NEXT:           (local.get $1)
+  ;; CHECK-NEXT:           (i32.const 1)
+  ;; CHECK-NEXT:          )
+  ;; CHECK-NEXT:          (i32.const 3)
   ;; CHECK-NEXT:         )
-  ;; CHECK-NEXT:         (i32.const 3)
   ;; CHECK-NEXT:        )
   ;; CHECK-NEXT:       )
   ;; CHECK-NEXT:      )
@@ -393,7 +405,7 @@
   ;; CHECK-NEXT:       (local.get $2)
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (call $import)
   ;; CHECK-NEXT:      (drop
   ;; CHECK-NEXT:       (br_if $__asyncify_unwind
@@ -410,8 +422,10 @@
   ;; CHECK-NEXT:     (i32.eqz
   ;; CHECK-NEXT:      (global.get $__asyncify_state)
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (return
-  ;; CHECK-NEXT:      (local.get $1)
+  ;; CHECK-NEXT:     (then
+  ;; CHECK-NEXT:      (return
+  ;; CHECK-NEXT:       (local.get $1)
+  ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (unreachable)
@@ -487,7 +501,7 @@
   ;; CHECK-NEXT:          (global.get $__asyncify_state)
   ;; CHECK-NEXT:          (i32.const 2)
   ;; CHECK-NEXT:         )
-  ;; CHECK-NEXT:         (block (result i32)
+  ;; CHECK-NEXT:         (then
   ;; CHECK-NEXT:          (i32.store
   ;; CHECK-NEXT:           (global.get $__asyncify_data)
   ;; CHECK-NEXT:           (i32.sub
@@ -503,12 +517,14 @@
   ;; CHECK-NEXT:           )
   ;; CHECK-NEXT:          )
   ;; CHECK-NEXT:         )
-  ;; CHECK-NEXT:         (local.get $1)
+  ;; CHECK-NEXT:         (else
+  ;; CHECK-NEXT:          (local.get $1)
+  ;; CHECK-NEXT:         )
   ;; CHECK-NEXT:        )
   ;; CHECK-NEXT:       )
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (call $import)
   ;; CHECK-NEXT:      (drop
   ;; CHECK-NEXT:       (br_if $__asyncify_unwind
@@ -542,7 +558,9 @@
   ;; CHECK-NEXT: )
   (func $calls-import2-if (param $x i32)
     (if (local.get $x)
-      (call $import)
+      (then
+        (call $import)
+      )
     )
   )
   ;; CHECK:      (func $calls-import2-if-else (param $0 i32)
@@ -560,7 +578,7 @@
   ;; CHECK-NEXT:           (global.get $__asyncify_state)
   ;; CHECK-NEXT:           (i32.const 2)
   ;; CHECK-NEXT:          )
-  ;; CHECK-NEXT:          (block (result i32)
+  ;; CHECK-NEXT:          (then
   ;; CHECK-NEXT:           (i32.store
   ;; CHECK-NEXT:            (global.get $__asyncify_data)
   ;; CHECK-NEXT:            (i32.sub
@@ -576,7 +594,9 @@
   ;; CHECK-NEXT:            )
   ;; CHECK-NEXT:           )
   ;; CHECK-NEXT:          )
-  ;; CHECK-NEXT:          (local.get $1)
+  ;; CHECK-NEXT:          (else
+  ;; CHECK-NEXT:           (local.get $1)
+  ;; CHECK-NEXT:          )
   ;; CHECK-NEXT:         )
   ;; CHECK-NEXT:         (local.get $0)
   ;; CHECK-NEXT:         (global.get $__asyncify_state)
@@ -594,7 +614,7 @@
   ;; CHECK-NEXT:         (global.get $__asyncify_state)
   ;; CHECK-NEXT:         (i32.const 2)
   ;; CHECK-NEXT:        )
-  ;; CHECK-NEXT:        (block
+  ;; CHECK-NEXT:        (then
   ;; CHECK-NEXT:         (i32.store
   ;; CHECK-NEXT:          (global.get $__asyncify_data)
   ;; CHECK-NEXT:          (i32.sub
@@ -623,7 +643,7 @@
   ;; CHECK-NEXT:       )
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (call $import3
   ;; CHECK-NEXT:       (i32.const 1)
   ;; CHECK-NEXT:      )
@@ -648,26 +668,28 @@
   ;; CHECK-NEXT:       (i32.const 2)
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (if
-  ;; CHECK-NEXT:      (i32.or
-  ;; CHECK-NEXT:       (i32.eqz
-  ;; CHECK-NEXT:        (global.get $__asyncify_state)
-  ;; CHECK-NEXT:       )
-  ;; CHECK-NEXT:       (i32.eq
-  ;; CHECK-NEXT:        (local.get $2)
-  ;; CHECK-NEXT:        (i32.const 1)
-  ;; CHECK-NEXT:       )
-  ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (block
-  ;; CHECK-NEXT:       (call $import3
-  ;; CHECK-NEXT:        (i32.const 2)
-  ;; CHECK-NEXT:       )
-  ;; CHECK-NEXT:       (drop
-  ;; CHECK-NEXT:        (br_if $__asyncify_unwind
+  ;; CHECK-NEXT:     (then
+  ;; CHECK-NEXT:      (if
+  ;; CHECK-NEXT:       (i32.or
+  ;; CHECK-NEXT:        (i32.eqz
+  ;; CHECK-NEXT:         (global.get $__asyncify_state)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (i32.eq
+  ;; CHECK-NEXT:         (local.get $2)
   ;; CHECK-NEXT:         (i32.const 1)
-  ;; CHECK-NEXT:         (i32.eq
-  ;; CHECK-NEXT:          (global.get $__asyncify_state)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (then
+  ;; CHECK-NEXT:        (call $import3
+  ;; CHECK-NEXT:         (i32.const 2)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:        (drop
+  ;; CHECK-NEXT:         (br_if $__asyncify_unwind
   ;; CHECK-NEXT:          (i32.const 1)
+  ;; CHECK-NEXT:          (i32.eq
+  ;; CHECK-NEXT:           (global.get $__asyncify_state)
+  ;; CHECK-NEXT:           (i32.const 1)
+  ;; CHECK-NEXT:          )
   ;; CHECK-NEXT:         )
   ;; CHECK-NEXT:        )
   ;; CHECK-NEXT:       )
@@ -710,8 +732,12 @@
   ;; CHECK-NEXT: )
   (func $calls-import2-if-else (param $x i32)
     (if (local.get $x)
-      (call $import3 (i32.const 1))
-      (call $import3 (i32.const 2))
+      (then
+        (call $import3 (i32.const 1))
+      )
+      (else
+        (call $import3 (i32.const 2))
+      )
     )
   )
   ;; CHECK:      (func $calls-import2-if-else-oneside (param $0 i32) (result i32)
@@ -724,7 +750,7 @@
   ;; CHECK-NEXT:      (global.get $__asyncify_state)
   ;; CHECK-NEXT:      (i32.const 2)
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (i32.store
   ;; CHECK-NEXT:       (global.get $__asyncify_data)
   ;; CHECK-NEXT:       (i32.sub
@@ -761,8 +787,10 @@
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:      (global.get $__asyncify_state)
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (return
-  ;; CHECK-NEXT:      (i32.const 1)
+  ;; CHECK-NEXT:     (then
+  ;; CHECK-NEXT:      (return
+  ;; CHECK-NEXT:       (i32.const 1)
+  ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (if
@@ -785,7 +813,7 @@
   ;; CHECK-NEXT:       )
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (call $import3
   ;; CHECK-NEXT:       (i32.const 2)
   ;; CHECK-NEXT:      )
@@ -804,8 +832,10 @@
   ;; CHECK-NEXT:     (i32.eqz
   ;; CHECK-NEXT:      (global.get $__asyncify_state)
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (return
-  ;; CHECK-NEXT:      (i32.const 3)
+  ;; CHECK-NEXT:     (then
+  ;; CHECK-NEXT:      (return
+  ;; CHECK-NEXT:       (i32.const 3)
+  ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (unreachable)
@@ -830,8 +860,12 @@
   ;; CHECK-NEXT: )
   (func $calls-import2-if-else-oneside (param $x i32) (result i32)
     (if (local.get $x)
-      (return (i32.const 1))
-      (call $import3 (i32.const 2))
+      (then
+        (return (i32.const 1))
+      )
+      (else
+        (call $import3 (i32.const 2))
+      )
     )
     (return (i32.const 3))
   )
@@ -850,7 +884,7 @@
   ;; CHECK-NEXT:           (global.get $__asyncify_state)
   ;; CHECK-NEXT:           (i32.const 2)
   ;; CHECK-NEXT:          )
-  ;; CHECK-NEXT:          (block (result i32)
+  ;; CHECK-NEXT:          (then
   ;; CHECK-NEXT:           (i32.store
   ;; CHECK-NEXT:            (global.get $__asyncify_data)
   ;; CHECK-NEXT:            (i32.sub
@@ -866,7 +900,9 @@
   ;; CHECK-NEXT:            )
   ;; CHECK-NEXT:           )
   ;; CHECK-NEXT:          )
-  ;; CHECK-NEXT:          (local.get $1)
+  ;; CHECK-NEXT:          (else
+  ;; CHECK-NEXT:           (local.get $1)
+  ;; CHECK-NEXT:          )
   ;; CHECK-NEXT:         )
   ;; CHECK-NEXT:         (local.get $0)
   ;; CHECK-NEXT:         (global.get $__asyncify_state)
@@ -888,7 +924,7 @@
   ;; CHECK-NEXT:          (global.get $__asyncify_state)
   ;; CHECK-NEXT:          (i32.const 2)
   ;; CHECK-NEXT:         )
-  ;; CHECK-NEXT:         (block (result i32)
+  ;; CHECK-NEXT:         (then
   ;; CHECK-NEXT:          (i32.store
   ;; CHECK-NEXT:           (global.get $__asyncify_data)
   ;; CHECK-NEXT:           (i32.sub
@@ -904,12 +940,14 @@
   ;; CHECK-NEXT:           )
   ;; CHECK-NEXT:          )
   ;; CHECK-NEXT:         )
-  ;; CHECK-NEXT:         (local.get $2)
+  ;; CHECK-NEXT:         (else
+  ;; CHECK-NEXT:          (local.get $2)
+  ;; CHECK-NEXT:         )
   ;; CHECK-NEXT:        )
   ;; CHECK-NEXT:       )
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (call $import3
   ;; CHECK-NEXT:       (i32.const 1)
   ;; CHECK-NEXT:      )
@@ -939,16 +977,20 @@
   ;; CHECK-NEXT:       )
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (return
-  ;; CHECK-NEXT:      (i32.const 2)
+  ;; CHECK-NEXT:     (then
+  ;; CHECK-NEXT:      (return
+  ;; CHECK-NEXT:       (i32.const 2)
+  ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (if
   ;; CHECK-NEXT:     (i32.eqz
   ;; CHECK-NEXT:      (global.get $__asyncify_state)
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (return
-  ;; CHECK-NEXT:      (i32.const 3)
+  ;; CHECK-NEXT:     (then
+  ;; CHECK-NEXT:      (return
+  ;; CHECK-NEXT:       (i32.const 3)
+  ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (unreachable)
@@ -988,8 +1030,12 @@
   ;; CHECK-NEXT: )
   (func $calls-import2-if-else-oneside2 (param $x i32) (result i32)
     (if (local.get $x)
-      (call $import3 (i32.const 1))
-      (return (i32.const 2))
+      (then
+        (call $import3 (i32.const 1))
+      )
+      (else
+        (return (i32.const 2))
+      )
     )
     (return (i32.const 3))
   )
@@ -1000,7 +1046,7 @@
   ;; CHECK-NEXT:    (global.get $__asyncify_state)
   ;; CHECK-NEXT:    (i32.const 2)
   ;; CHECK-NEXT:   )
-  ;; CHECK-NEXT:   (block
+  ;; CHECK-NEXT:   (then
   ;; CHECK-NEXT:    (i32.store
   ;; CHECK-NEXT:     (global.get $__asyncify_data)
   ;; CHECK-NEXT:     (i32.sub
@@ -1026,7 +1072,7 @@
   ;; CHECK-NEXT:      (global.get $__asyncify_state)
   ;; CHECK-NEXT:      (i32.const 2)
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (i32.store
   ;; CHECK-NEXT:       (global.get $__asyncify_data)
   ;; CHECK-NEXT:       (i32.sub
@@ -1055,7 +1101,7 @@
   ;; CHECK-NEXT:        (local.get $1)
   ;; CHECK-NEXT:       )
   ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (block
+  ;; CHECK-NEXT:      (then
   ;; CHECK-NEXT:       (call $import3
   ;; CHECK-NEXT:        (i32.const 1)
   ;; CHECK-NEXT:       )
@@ -1074,11 +1120,13 @@
   ;; CHECK-NEXT:      (i32.eqz
   ;; CHECK-NEXT:       (global.get $__asyncify_state)
   ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (br_if $l
-  ;; CHECK-NEXT:       (local.tee $0
-  ;; CHECK-NEXT:        (i32.add
-  ;; CHECK-NEXT:         (local.get $0)
-  ;; CHECK-NEXT:         (i32.const 1)
+  ;; CHECK-NEXT:      (then
+  ;; CHECK-NEXT:       (br_if $l
+  ;; CHECK-NEXT:        (local.tee $0
+  ;; CHECK-NEXT:         (i32.add
+  ;; CHECK-NEXT:          (local.get $0)
+  ;; CHECK-NEXT:          (i32.const 1)
+  ;; CHECK-NEXT:         )
   ;; CHECK-NEXT:        )
   ;; CHECK-NEXT:       )
   ;; CHECK-NEXT:      )
@@ -1138,7 +1186,7 @@
   ;; CHECK-NEXT:    (global.get $__asyncify_state)
   ;; CHECK-NEXT:    (i32.const 2)
   ;; CHECK-NEXT:   )
-  ;; CHECK-NEXT:   (block
+  ;; CHECK-NEXT:   (then
   ;; CHECK-NEXT:    (i32.store
   ;; CHECK-NEXT:     (global.get $__asyncify_data)
   ;; CHECK-NEXT:     (i32.sub
@@ -1164,7 +1212,7 @@
   ;; CHECK-NEXT:      (global.get $__asyncify_state)
   ;; CHECK-NEXT:      (i32.const 2)
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (i32.store
   ;; CHECK-NEXT:       (global.get $__asyncify_data)
   ;; CHECK-NEXT:       (i32.sub
@@ -1193,7 +1241,7 @@
   ;; CHECK-NEXT:        (local.get $2)
   ;; CHECK-NEXT:       )
   ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (block
+  ;; CHECK-NEXT:      (then
   ;; CHECK-NEXT:       (local.set $1
   ;; CHECK-NEXT:        (call $import2)
   ;; CHECK-NEXT:       )
@@ -1271,7 +1319,7 @@
   ;; CHECK-NEXT:      (global.get $__asyncify_state)
   ;; CHECK-NEXT:      (i32.const 2)
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (i32.store
   ;; CHECK-NEXT:       (global.get $__asyncify_data)
   ;; CHECK-NEXT:       (i32.sub
@@ -1294,7 +1342,9 @@
   ;; CHECK-NEXT:     (i32.eqz
   ;; CHECK-NEXT:      (global.get $__asyncify_state)
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (call $boring)
+  ;; CHECK-NEXT:     (then
+  ;; CHECK-NEXT:      (call $boring)
+  ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (if
   ;; CHECK-NEXT:     (i32.or
@@ -1305,7 +1355,7 @@
   ;; CHECK-NEXT:       (local.get $0)
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (call $import)
   ;; CHECK-NEXT:      (drop
   ;; CHECK-NEXT:       (br_if $__asyncify_unwind
@@ -1322,7 +1372,9 @@
   ;; CHECK-NEXT:     (i32.eqz
   ;; CHECK-NEXT:      (global.get $__asyncify_state)
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (call $boring)
+  ;; CHECK-NEXT:     (then
+  ;; CHECK-NEXT:      (call $boring)
+  ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (if
   ;; CHECK-NEXT:     (i32.or
@@ -1334,7 +1386,7 @@
   ;; CHECK-NEXT:       (i32.const 1)
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (call $import)
   ;; CHECK-NEXT:      (drop
   ;; CHECK-NEXT:       (br_if $__asyncify_unwind
@@ -1385,7 +1437,7 @@
   ;; CHECK-NEXT:      (global.get $__asyncify_state)
   ;; CHECK-NEXT:      (i32.const 2)
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (i32.store
   ;; CHECK-NEXT:       (global.get $__asyncify_data)
   ;; CHECK-NEXT:       (i32.sub
@@ -1408,7 +1460,9 @@
   ;; CHECK-NEXT:     (i32.eqz
   ;; CHECK-NEXT:      (global.get $__asyncify_state)
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (call $boring-deep)
+  ;; CHECK-NEXT:     (then
+  ;; CHECK-NEXT:      (call $boring-deep)
+  ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (if
   ;; CHECK-NEXT:     (i32.or
@@ -1419,7 +1473,7 @@
   ;; CHECK-NEXT:       (local.get $0)
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (call $import-deep)
   ;; CHECK-NEXT:      (drop
   ;; CHECK-NEXT:       (br_if $__asyncify_unwind
@@ -1436,7 +1490,9 @@
   ;; CHECK-NEXT:     (i32.eqz
   ;; CHECK-NEXT:      (global.get $__asyncify_state)
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (call $boring)
+  ;; CHECK-NEXT:     (then
+  ;; CHECK-NEXT:      (call $boring)
+  ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (if
   ;; CHECK-NEXT:     (i32.or
@@ -1448,7 +1504,7 @@
   ;; CHECK-NEXT:       (i32.const 1)
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (call $import)
   ;; CHECK-NEXT:      (drop
   ;; CHECK-NEXT:       (br_if $__asyncify_unwind
@@ -1507,7 +1563,7 @@
   ;; CHECK-NEXT:         (global.get $__asyncify_state)
   ;; CHECK-NEXT:         (i32.const 2)
   ;; CHECK-NEXT:        )
-  ;; CHECK-NEXT:        (block (result i32)
+  ;; CHECK-NEXT:        (then
   ;; CHECK-NEXT:         (i32.store
   ;; CHECK-NEXT:          (global.get $__asyncify_data)
   ;; CHECK-NEXT:          (i32.sub
@@ -1523,11 +1579,13 @@
   ;; CHECK-NEXT:          )
   ;; CHECK-NEXT:         )
   ;; CHECK-NEXT:        )
-  ;; CHECK-NEXT:        (local.get $0)
+  ;; CHECK-NEXT:        (else
+  ;; CHECK-NEXT:         (local.get $0)
+  ;; CHECK-NEXT:        )
   ;; CHECK-NEXT:       )
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:     (then
   ;; CHECK-NEXT:      (call $import)
   ;; CHECK-NEXT:      (drop
   ;; CHECK-NEXT:       (br_if $__asyncify_unwind
@@ -1580,7 +1638,9 @@
 ;; CHECK-NEXT:     (global.get $__asyncify_data)
 ;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
-;; CHECK-NEXT:   (unreachable)
+;; CHECK-NEXT:   (then
+;; CHECK-NEXT:    (unreachable)
+;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT: )
 
@@ -1597,7 +1657,9 @@
 ;; CHECK-NEXT:     (global.get $__asyncify_data)
 ;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
-;; CHECK-NEXT:   (unreachable)
+;; CHECK-NEXT:   (then
+;; CHECK-NEXT:    (unreachable)
+;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT: )
 
@@ -1617,7 +1679,9 @@
 ;; CHECK-NEXT:     (global.get $__asyncify_data)
 ;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
-;; CHECK-NEXT:   (unreachable)
+;; CHECK-NEXT:   (then
+;; CHECK-NEXT:    (unreachable)
+;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT: )
 
@@ -1634,7 +1698,9 @@
 ;; CHECK-NEXT:     (global.get $__asyncify_data)
 ;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
-;; CHECK-NEXT:   (unreachable)
+;; CHECK-NEXT:   (then
+;; CHECK-NEXT:    (unreachable)
+;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT: )
 

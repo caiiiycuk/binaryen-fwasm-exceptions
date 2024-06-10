@@ -18,7 +18,8 @@
 #define parser_parsers_h
 
 #include "common.h"
-#include "input.h"
+#include "contexts.h"
+#include "lexer.h"
 
 namespace wasm::WATParser {
 
@@ -27,6 +28,7 @@ using namespace std::string_view_literals;
 // Types
 template<typename Ctx> Result<typename Ctx::HeapTypeT> heaptype(Ctx&);
 template<typename Ctx> MaybeResult<typename Ctx::RefTypeT> reftype(Ctx&);
+template<typename Ctx> MaybeResult<typename Ctx::TypeT> tupletype(Ctx&);
 template<typename Ctx> Result<typename Ctx::TypeT> valtype(Ctx&);
 template<typename Ctx> MaybeResult<typename Ctx::ParamsT> params(Ctx&);
 template<typename Ctx> MaybeResult<typename Ctx::ResultsT> results(Ctx&);
@@ -39,13 +41,19 @@ template<typename Ctx> MaybeResult<typename Ctx::ArrayT> arraytype(Ctx&);
 template<typename Ctx> Result<typename Ctx::LimitsT> limits32(Ctx&);
 template<typename Ctx> Result<typename Ctx::LimitsT> limits64(Ctx&);
 template<typename Ctx> Result<typename Ctx::MemTypeT> memtype(Ctx&);
+template<typename Ctx> Result<typename Ctx::TableTypeT> tabletype(Ctx&);
 template<typename Ctx> Result<typename Ctx::GlobalTypeT> globaltype(Ctx&);
+template<typename Ctx> Result<uint32_t> tupleArity(Ctx&);
 
 // Instructions
-template<typename Ctx> MaybeResult<> foldedBlockinstr(Ctx&);
-template<typename Ctx> MaybeResult<> unfoldedBlockinstr(Ctx&);
-template<typename Ctx> MaybeResult<> blockinstr(Ctx&);
-template<typename Ctx> MaybeResult<> plaininstr(Ctx&);
+template<typename Ctx>
+MaybeResult<> foldedBlockinstr(Ctx&, const std::vector<Annotation>&);
+template<typename Ctx>
+MaybeResult<> unfoldedBlockinstr(Ctx&, const std::vector<Annotation>&);
+template<typename Ctx>
+MaybeResult<> blockinstr(Ctx&, const std::vector<Annotation>&);
+template<typename Ctx>
+MaybeResult<> plaininstr(Ctx&, const std::vector<Annotation>&);
 template<typename Ctx> MaybeResult<> instr(Ctx&);
 template<typename Ctx> MaybeResult<> foldedinstr(Ctx&);
 template<typename Ctx> Result<> instrs(Ctx&);
@@ -53,143 +61,291 @@ template<typename Ctx> Result<> foldedinstrs(Ctx&);
 template<typename Ctx> Result<typename Ctx::ExprT> expr(Ctx&);
 template<typename Ctx> Result<typename Ctx::MemargT> memarg(Ctx&, uint32_t);
 template<typename Ctx> Result<typename Ctx::BlockTypeT> blocktype(Ctx&);
-template<typename Ctx> MaybeResult<> block(Ctx&, bool);
-template<typename Ctx> MaybeResult<> ifelse(Ctx&, bool);
-template<typename Ctx> MaybeResult<> loop(Ctx&, bool);
-template<typename Ctx> Result<> makeUnreachable(Ctx&, Index);
-template<typename Ctx> Result<> makeNop(Ctx&, Index);
-template<typename Ctx> Result<> makeBinary(Ctx&, Index, BinaryOp op);
-template<typename Ctx> Result<> makeUnary(Ctx&, Index, UnaryOp op);
-template<typename Ctx> Result<> makeSelect(Ctx&, Index);
-template<typename Ctx> Result<> makeDrop(Ctx&, Index);
-template<typename Ctx> Result<> makeMemorySize(Ctx&, Index);
-template<typename Ctx> Result<> makeMemoryGrow(Ctx&, Index);
-template<typename Ctx> Result<> makeLocalGet(Ctx&, Index);
-template<typename Ctx> Result<> makeLocalTee(Ctx&, Index);
-template<typename Ctx> Result<> makeLocalSet(Ctx&, Index);
-template<typename Ctx> Result<> makeGlobalGet(Ctx&, Index);
-template<typename Ctx> Result<> makeGlobalSet(Ctx&, Index);
-template<typename Ctx> Result<> makeBlock(Ctx&, Index);
-template<typename Ctx> Result<> makeThenOrElse(Ctx&, Index);
-template<typename Ctx> Result<> makeConst(Ctx&, Index, Type type);
+template<typename Ctx>
+MaybeResult<> block(Ctx&, const std::vector<Annotation>&, bool);
+template<typename Ctx>
+MaybeResult<> ifelse(Ctx&, const std::vector<Annotation>&, bool);
+template<typename Ctx>
+MaybeResult<> loop(Ctx&, const std::vector<Annotation>&, bool);
+template<typename Ctx>
+MaybeResult<> trycatch(Ctx&, const std::vector<Annotation>&, bool);
+template<typename Ctx> MaybeResult<typename Ctx::CatchT> catchinstr(Ctx&);
+template<typename Ctx>
+MaybeResult<> trytable(Ctx&, const std::vector<Annotation>&, bool);
+template<typename Ctx>
+Result<> makeUnreachable(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeNop(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeBinary(Ctx&, Index, const std::vector<Annotation>&, BinaryOp op);
+template<typename Ctx>
+Result<> makeUnary(Ctx&, Index, const std::vector<Annotation>&, UnaryOp op);
+template<typename Ctx>
+Result<> makeSelect(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeDrop(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeMemorySize(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeMemoryGrow(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeLocalGet(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeLocalTee(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeLocalSet(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeGlobalGet(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeGlobalSet(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeConst(Ctx&, Index, const std::vector<Annotation>&, Type type);
+template<typename Ctx>
+Result<> makeLoad(Ctx&,
+                  Index,
+                  const std::vector<Annotation>&,
+                  Type type,
+                  bool signed_,
+                  int bytes,
+                  bool isAtomic);
+template<typename Ctx>
+Result<> makeStore(Ctx&,
+                   Index,
+                   const std::vector<Annotation>&,
+                   Type type,
+                   int bytes,
+                   bool isAtomic);
+template<typename Ctx>
+Result<> makeAtomicRMW(Ctx&,
+                       Index,
+                       const std::vector<Annotation>&,
+                       AtomicRMWOp op,
+                       Type type,
+                       uint8_t bytes);
+template<typename Ctx>
+Result<> makeAtomicCmpxchg(
+  Ctx&, Index, const std::vector<Annotation>&, Type type, uint8_t bytes);
+template<typename Ctx>
+Result<> makeAtomicWait(Ctx&, Index, const std::vector<Annotation>&, Type type);
+template<typename Ctx>
+Result<> makeAtomicNotify(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeAtomicFence(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeSIMDExtract(
+  Ctx&, Index, const std::vector<Annotation>&, SIMDExtractOp op, size_t lanes);
+template<typename Ctx>
+Result<> makeSIMDReplace(
+  Ctx&, Index, const std::vector<Annotation>&, SIMDReplaceOp op, size_t lanes);
+template<typename Ctx>
+Result<> makeSIMDShuffle(Ctx&, Index, const std::vector<Annotation>&);
 template<typename Ctx>
 Result<>
-makeLoad(Ctx&, Index, Type type, bool signed_, int bytes, bool isAtomic);
+makeSIMDTernary(Ctx&, Index, const std::vector<Annotation>&, SIMDTernaryOp op);
 template<typename Ctx>
-Result<> makeStore(Ctx&, Index, Type type, int bytes, bool isAtomic);
+Result<>
+makeSIMDShift(Ctx&, Index, const std::vector<Annotation>&, SIMDShiftOp op);
 template<typename Ctx>
-Result<> makeAtomicRMW(Ctx&, Index, AtomicRMWOp op, Type type, uint8_t bytes);
+Result<> makeSIMDLoad(
+  Ctx&, Index, const std::vector<Annotation>&, SIMDLoadOp op, int bytes);
 template<typename Ctx>
-Result<> makeAtomicCmpxchg(Ctx&, Index, Type type, uint8_t bytes);
-template<typename Ctx> Result<> makeAtomicWait(Ctx&, Index, Type type);
-template<typename Ctx> Result<> makeAtomicNotify(Ctx&, Index);
-template<typename Ctx> Result<> makeAtomicFence(Ctx&, Index);
+Result<> makeSIMDLoadStoreLane(Ctx&,
+                               Index,
+                               const std::vector<Annotation>&,
+                               SIMDLoadStoreLaneOp op,
+                               int bytes);
 template<typename Ctx>
-Result<> makeSIMDExtract(Ctx&, Index, SIMDExtractOp op, size_t lanes);
+Result<> makeMemoryInit(Ctx&, Index, const std::vector<Annotation>&);
 template<typename Ctx>
-Result<> makeSIMDReplace(Ctx&, Index, SIMDReplaceOp op, size_t lanes);
-template<typename Ctx> Result<> makeSIMDShuffle(Ctx&, Index);
-template<typename Ctx> Result<> makeSIMDTernary(Ctx&, Index, SIMDTernaryOp op);
-template<typename Ctx> Result<> makeSIMDShift(Ctx&, Index, SIMDShiftOp op);
+Result<> makeDataDrop(Ctx&, Index, const std::vector<Annotation>&);
 template<typename Ctx>
-Result<> makeSIMDLoad(Ctx&, Index, SIMDLoadOp op, int bytes);
+Result<> makeMemoryCopy(Ctx&, Index, const std::vector<Annotation>&);
 template<typename Ctx>
-Result<> makeSIMDLoadStoreLane(Ctx&, Index, SIMDLoadStoreLaneOp op, int bytes);
-template<typename Ctx> Result<> makeMemoryInit(Ctx&, Index);
-template<typename Ctx> Result<> makeDataDrop(Ctx&, Index);
-template<typename Ctx> Result<> makeMemoryCopy(Ctx&, Index);
-template<typename Ctx> Result<> makeMemoryFill(Ctx&, Index);
-template<typename Ctx> Result<> makePop(Ctx&, Index);
-template<typename Ctx> Result<> makeIf(Ctx&, Index);
+Result<> makeMemoryFill(Ctx&, Index, const std::vector<Annotation>&);
 template<typename Ctx>
-Result<> makeMaybeBlock(Ctx&, Index, size_t i, Type type);
-template<typename Ctx> Result<> makeLoop(Ctx&, Index);
-template<typename Ctx> Result<> makeCall(Ctx&, Index, bool isReturn);
-template<typename Ctx> Result<> makeCallIndirect(Ctx&, Index, bool isReturn);
-template<typename Ctx> Result<> makeBreak(Ctx&, Index);
-template<typename Ctx> Result<> makeBreakTable(Ctx&, Index);
-template<typename Ctx> Result<> makeReturn(Ctx&, Index);
-template<typename Ctx> Result<> makeRefNull(Ctx&, Index);
-template<typename Ctx> Result<> makeRefIsNull(Ctx&, Index);
-template<typename Ctx> Result<> makeRefFunc(Ctx&, Index);
-template<typename Ctx> Result<> makeRefEq(Ctx&, Index);
-template<typename Ctx> Result<> makeTableGet(Ctx&, Index);
-template<typename Ctx> Result<> makeTableSet(Ctx&, Index);
-template<typename Ctx> Result<> makeTableSize(Ctx&, Index);
-template<typename Ctx> Result<> makeTableGrow(Ctx&, Index);
-template<typename Ctx> Result<> makeTableFill(Ctx&, Index);
-template<typename Ctx> Result<> makeTry(Ctx&, Index);
+Result<> makePop(Ctx&, Index, const std::vector<Annotation>&);
 template<typename Ctx>
-Result<> makeTryOrCatchBody(Ctx&, Index, Type type, bool isTry);
-template<typename Ctx> Result<> makeThrow(Ctx&, Index);
-template<typename Ctx> Result<> makeRethrow(Ctx&, Index);
-template<typename Ctx> Result<> makeTupleMake(Ctx&, Index);
-template<typename Ctx> Result<> makeTupleExtract(Ctx&, Index);
-template<typename Ctx> Result<> makeCallRef(Ctx&, Index, bool isReturn);
-template<typename Ctx> Result<> makeRefI31(Ctx&, Index);
-template<typename Ctx> Result<> makeI31Get(Ctx&, Index, bool signed_);
-template<typename Ctx> Result<> makeRefTest(Ctx&, Index);
-template<typename Ctx> Result<> makeRefCast(Ctx&, Index);
-template<typename Ctx> Result<> makeBrOnNull(Ctx&, Index, bool onFail = false);
-template<typename Ctx> Result<> makeBrOnCast(Ctx&, Index, bool onFail = false);
-template<typename Ctx> Result<> makeStructNew(Ctx&, Index, bool default_);
+Result<> makeCall(Ctx&, Index, const std::vector<Annotation>&, bool isReturn);
 template<typename Ctx>
-Result<> makeStructGet(Ctx&, Index, bool signed_ = false);
-template<typename Ctx> Result<> makeStructSet(Ctx&, Index);
-template<typename Ctx> Result<> makeArrayNew(Ctx&, Index, bool default_);
-template<typename Ctx> Result<> makeArrayNewData(Ctx&, Index);
-template<typename Ctx> Result<> makeArrayNewElem(Ctx&, Index);
-template<typename Ctx> Result<> makeArrayNewFixed(Ctx&, Index);
-template<typename Ctx> Result<> makeArrayGet(Ctx&, Index, bool signed_ = false);
-template<typename Ctx> Result<> makeArraySet(Ctx&, Index);
-template<typename Ctx> Result<> makeArrayLen(Ctx&, Index);
-template<typename Ctx> Result<> makeArrayCopy(Ctx&, Index);
-template<typename Ctx> Result<> makeArrayFill(Ctx&, Index);
-template<typename Ctx> Result<> makeArrayInitData(Ctx&, Index);
-template<typename Ctx> Result<> makeArrayInitElem(Ctx&, Index);
-template<typename Ctx> Result<> makeRefAs(Ctx&, Index, RefAsOp op);
+Result<>
+makeCallIndirect(Ctx&, Index, const std::vector<Annotation>&, bool isReturn);
 template<typename Ctx>
-Result<> makeStringNew(Ctx&, Index, StringNewOp op, bool try_);
-template<typename Ctx> Result<> makeStringConst(Ctx&, Index);
+Result<>
+makeBreak(Ctx&, Index, const std::vector<Annotation>&, bool isConditional);
 template<typename Ctx>
-Result<> makeStringMeasure(Ctx&, Index, StringMeasureOp op);
+Result<> makeBreakTable(Ctx&, Index, const std::vector<Annotation>&);
 template<typename Ctx>
-Result<> makeStringEncode(Ctx&, Index, StringEncodeOp op);
-template<typename Ctx> Result<> makeStringConcat(Ctx&, Index);
-template<typename Ctx> Result<> makeStringEq(Ctx&, Index, StringEqOp);
-template<typename Ctx> Result<> makeStringAs(Ctx&, Index, StringAsOp op);
-template<typename Ctx> Result<> makeStringWTF8Advance(Ctx&, Index);
-template<typename Ctx> Result<> makeStringWTF16Get(Ctx&, Index);
-template<typename Ctx> Result<> makeStringIterNext(Ctx&, Index);
+Result<> makeReturn(Ctx&, Index, const std::vector<Annotation>&);
 template<typename Ctx>
-Result<> makeStringIterMove(Ctx&, Index, StringIterMoveOp op);
+Result<> makeRefNull(Ctx&, Index, const std::vector<Annotation>&);
 template<typename Ctx>
-Result<> makeStringSliceWTF(Ctx&, Index, StringSliceWTFOp op);
-template<typename Ctx> Result<> makeStringSliceIter(Ctx&, Index);
+Result<> makeRefIsNull(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeRefFunc(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeRefEq(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeTableGet(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeTableSet(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeTableSize(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeTableGrow(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeTableFill(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeTableCopy(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeThrow(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeRethrow(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeThrowRef(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeTupleMake(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeTupleExtract(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeTupleDrop(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<>
+makeCallRef(Ctx&, Index, const std::vector<Annotation>&, bool isReturn);
+template<typename Ctx>
+Result<> makeRefI31(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeI31Get(Ctx&, Index, const std::vector<Annotation>&, bool signed_);
+template<typename Ctx>
+Result<> makeRefTest(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeRefCast(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<>
+makeBrOnNull(Ctx&, Index, const std::vector<Annotation>&, bool onFail = false);
+template<typename Ctx>
+Result<>
+makeBrOnCast(Ctx&, Index, const std::vector<Annotation>&, bool onFail = false);
+template<typename Ctx>
+Result<>
+makeStructNew(Ctx&, Index, const std::vector<Annotation>&, bool default_);
+template<typename Ctx>
+Result<> makeStructGet(Ctx&,
+                       Index,
+                       const std::vector<Annotation>&,
+                       bool signed_ = false);
+template<typename Ctx>
+Result<> makeStructSet(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<>
+makeArrayNew(Ctx&, Index, const std::vector<Annotation>&, bool default_);
+template<typename Ctx>
+Result<> makeArrayNewData(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeArrayNewElem(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeArrayNewFixed(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<>
+makeArrayGet(Ctx&, Index, const std::vector<Annotation>&, bool signed_ = false);
+template<typename Ctx>
+Result<> makeArraySet(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeArrayLen(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeArrayCopy(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeArrayFill(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeArrayInitData(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeArrayInitElem(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeRefAs(Ctx&, Index, const std::vector<Annotation>&, RefAsOp op);
+template<typename Ctx>
+Result<> makeStringNew(
+  Ctx&, Index, const std::vector<Annotation>&, StringNewOp op, bool try_);
+template<typename Ctx>
+Result<> makeStringConst(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeStringMeasure(Ctx&,
+                           Index,
+                           const std::vector<Annotation>&,
+                           StringMeasureOp op);
+template<typename Ctx>
+Result<> makeStringEncode(Ctx&,
+                          Index,
+                          const std::vector<Annotation>&,
+                          StringEncodeOp op);
+template<typename Ctx>
+Result<> makeStringConcat(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeStringEq(Ctx&, Index, const std::vector<Annotation>&, StringEqOp);
+template<typename Ctx>
+Result<>
+makeStringAs(Ctx&, Index, const std::vector<Annotation>&, StringAsOp op);
+template<typename Ctx>
+Result<> makeStringWTF8Advance(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeStringWTF16Get(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeStringIterNext(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeStringIterMove(Ctx&,
+                            Index,
+                            const std::vector<Annotation>&,
+                            StringIterMoveOp op);
+template<typename Ctx>
+Result<> makeStringSliceWTF(Ctx&,
+                            Index,
+                            const std::vector<Annotation>&,
+                            StringSliceWTFOp op);
+template<typename Ctx>
+Result<> makeStringSliceIter(Ctx&, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeContNew(Ctx*, Index, const std::vector<Annotation>&);
+template<typename Ctx>
+Result<> makeResume(Ctx&, Index, const std::vector<Annotation>&);
 
 // Modules
 template<typename Ctx> MaybeResult<Index> maybeTypeidx(Ctx& ctx);
 template<typename Ctx> Result<typename Ctx::HeapTypeT> typeidx(Ctx&);
 template<typename Ctx>
 Result<typename Ctx::FieldIdxT> fieldidx(Ctx&, typename Ctx::HeapTypeT);
+template<typename Ctx> MaybeResult<typename Ctx::FuncIdxT> maybeFuncidx(Ctx&);
+template<typename Ctx> Result<typename Ctx::FuncIdxT> funcidx(Ctx&);
+template<typename Ctx> MaybeResult<typename Ctx::TableIdxT> maybeTableidx(Ctx&);
+template<typename Ctx> Result<typename Ctx::TableIdxT> tableidx(Ctx&);
+template<typename Ctx> MaybeResult<typename Ctx::TableIdxT> maybeTableuse(Ctx&);
 template<typename Ctx> MaybeResult<typename Ctx::MemoryIdxT> maybeMemidx(Ctx&);
 template<typename Ctx> Result<typename Ctx::MemoryIdxT> memidx(Ctx&);
 template<typename Ctx> MaybeResult<typename Ctx::MemoryIdxT> maybeMemuse(Ctx&);
 template<typename Ctx> Result<typename Ctx::GlobalIdxT> globalidx(Ctx&);
+template<typename Ctx> Result<typename Ctx::ElemIdxT> elemidx(Ctx&);
+template<typename Ctx> Result<typename Ctx::DataIdxT> dataidx(Ctx&);
 template<typename Ctx> Result<typename Ctx::LocalIdxT> localidx(Ctx&);
-template<typename Ctx> Result<typename Ctx::LabelIdxT> labelidx(Ctx&);
+template<typename Ctx>
+Result<typename Ctx::LabelIdxT> labelidx(Ctx&, bool inDelegate = false);
+template<typename Ctx> Result<typename Ctx::TagIdxT> tagidx(Ctx&);
 template<typename Ctx> Result<typename Ctx::TypeUseT> typeuse(Ctx&);
-MaybeResult<ImportNames> inlineImport(ParseInput&);
-Result<std::vector<Name>> inlineExports(ParseInput&);
+MaybeResult<ImportNames> inlineImport(Lexer&);
+Result<std::vector<Name>> inlineExports(Lexer&);
 template<typename Ctx> Result<> strtype(Ctx&);
 template<typename Ctx> MaybeResult<typename Ctx::ModuleNameT> subtype(Ctx&);
 template<typename Ctx> MaybeResult<> deftype(Ctx&);
 template<typename Ctx> MaybeResult<typename Ctx::LocalsT> locals(Ctx&);
+template<typename Ctx> MaybeResult<> import_(Ctx&);
 template<typename Ctx> MaybeResult<> func(Ctx&);
+template<typename Ctx> MaybeResult<> table(Ctx&);
 template<typename Ctx> MaybeResult<> memory(Ctx&);
 template<typename Ctx> MaybeResult<> global(Ctx&);
+template<typename Ctx> MaybeResult<> export_(Ctx&);
+template<typename Ctx> MaybeResult<> start(Ctx&);
+template<typename Ctx> MaybeResult<typename Ctx::ExprT> maybeElemexpr(Ctx&);
+template<typename Ctx> Result<typename Ctx::ElemListT> elemlist(Ctx&, bool);
+template<typename Ctx> MaybeResult<> elem(Ctx&);
 template<typename Ctx> Result<typename Ctx::DataStringT> datastring(Ctx&);
 template<typename Ctx> MaybeResult<> data(Ctx&);
+template<typename Ctx> MaybeResult<> tag(Ctx&);
 template<typename Ctx> MaybeResult<> modulefield(Ctx&);
 template<typename Ctx> Result<> module(Ctx&);
 
@@ -202,12 +358,18 @@ template<typename Ctx> Result<> module(Ctx&);
 template<typename Ctx> struct WithPosition {
   Ctx& ctx;
   Index original;
+  std::vector<Annotation> annotations;
 
-  WithPosition(Ctx& ctx, Index pos) : ctx(ctx), original(ctx.in.getPos()) {
-    ctx.in.lexer.setIndex(pos);
+  WithPosition(Ctx& ctx, Index pos)
+    : ctx(ctx), original(ctx.in.getPos()),
+      annotations(ctx.in.takeAnnotations()) {
+    ctx.in.setIndex(pos);
   }
 
-  ~WithPosition() { ctx.in.lexer.setIndex(original); }
+  ~WithPosition() {
+    ctx.in.setIndex(original);
+    ctx.in.setAnnotations(std::move(annotations));
+  }
 };
 
 // Deduction guide to satisfy -Wctad-maybe-unsupported.
@@ -222,25 +384,52 @@ template<typename Ctx> WithPosition(Ctx& ctx, Index) -> WithPosition<Ctx>;
 //            | 'extern'  => extern
 template<typename Ctx> Result<typename Ctx::HeapTypeT> heaptype(Ctx& ctx) {
   if (ctx.in.takeKeyword("func"sv)) {
-    return ctx.makeFunc();
+    return ctx.makeFuncType();
   }
   if (ctx.in.takeKeyword("any"sv)) {
-    return ctx.makeAny();
+    return ctx.makeAnyType();
   }
   if (ctx.in.takeKeyword("extern"sv)) {
-    return ctx.makeExtern();
+    return ctx.makeExternType();
   }
   if (ctx.in.takeKeyword("eq"sv)) {
-    return ctx.makeEq();
+    return ctx.makeEqType();
   }
   if (ctx.in.takeKeyword("i31"sv)) {
-    return ctx.makeI31();
+    return ctx.makeI31Type();
   }
   if (ctx.in.takeKeyword("struct"sv)) {
     return ctx.makeStructType();
   }
   if (ctx.in.takeKeyword("array"sv)) {
     return ctx.makeArrayType();
+  }
+  if (ctx.in.takeKeyword("exn"sv)) {
+    return ctx.makeExnType();
+  }
+  if (ctx.in.takeKeyword("string"sv)) {
+    return ctx.makeStringType();
+  }
+  if (ctx.in.takeKeyword("stringview_wtf8"sv)) {
+    return ctx.makeStringViewWTF8Type();
+  }
+  if (ctx.in.takeKeyword("stringview_wtf16"sv)) {
+    return ctx.makeStringViewWTF16Type();
+  }
+  if (ctx.in.takeKeyword("stringview_iter"sv)) {
+    return ctx.makeStringViewIterType();
+  }
+  if (ctx.in.takeKeyword("none"sv)) {
+    return ctx.makeNoneType();
+  }
+  if (ctx.in.takeKeyword("noextern"sv)) {
+    return ctx.makeNoextType();
+  }
+  if (ctx.in.takeKeyword("nofunc"sv)) {
+    return ctx.makeNofuncType();
+  }
+  if (ctx.in.takeKeyword("noexn"sv)) {
+    return ctx.makeNoexnType();
   }
   auto type = typeidx(ctx);
   CHECK_ERR(type);
@@ -257,25 +446,52 @@ template<typename Ctx> Result<typename Ctx::HeapTypeT> heaptype(Ctx& ctx) {
 //           | '(' ref null? t:heaptype ')' => ref null? t
 template<typename Ctx> MaybeResult<typename Ctx::TypeT> reftype(Ctx& ctx) {
   if (ctx.in.takeKeyword("funcref"sv)) {
-    return ctx.makeRefType(ctx.makeFunc(), Nullable);
+    return ctx.makeRefType(ctx.makeFuncType(), Nullable);
   }
   if (ctx.in.takeKeyword("externref"sv)) {
-    return ctx.makeRefType(ctx.makeExtern(), Nullable);
+    return ctx.makeRefType(ctx.makeExternType(), Nullable);
   }
   if (ctx.in.takeKeyword("anyref"sv)) {
-    return ctx.makeRefType(ctx.makeAny(), Nullable);
+    return ctx.makeRefType(ctx.makeAnyType(), Nullable);
   }
   if (ctx.in.takeKeyword("eqref"sv)) {
-    return ctx.makeRefType(ctx.makeEq(), Nullable);
+    return ctx.makeRefType(ctx.makeEqType(), Nullable);
   }
   if (ctx.in.takeKeyword("i31ref"sv)) {
-    return ctx.makeRefType(ctx.makeI31(), Nullable);
+    return ctx.makeRefType(ctx.makeI31Type(), Nullable);
   }
   if (ctx.in.takeKeyword("structref"sv)) {
     return ctx.makeRefType(ctx.makeStructType(), Nullable);
   }
   if (ctx.in.takeKeyword("arrayref"sv)) {
-    return ctx.in.err("arrayref not yet supported");
+    return ctx.makeRefType(ctx.makeArrayType(), Nullable);
+  }
+  if (ctx.in.takeKeyword("exnref"sv)) {
+    return ctx.makeRefType(ctx.makeExnType(), Nullable);
+  }
+  if (ctx.in.takeKeyword("stringref"sv)) {
+    return ctx.makeRefType(ctx.makeStringType(), Nullable);
+  }
+  if (ctx.in.takeKeyword("stringview_wtf8"sv)) {
+    return ctx.makeRefType(ctx.makeStringViewWTF8Type(), Nullable);
+  }
+  if (ctx.in.takeKeyword("stringview_wtf16"sv)) {
+    return ctx.makeRefType(ctx.makeStringViewWTF16Type(), Nullable);
+  }
+  if (ctx.in.takeKeyword("stringview_iter"sv)) {
+    return ctx.makeRefType(ctx.makeStringViewIterType(), Nullable);
+  }
+  if (ctx.in.takeKeyword("nullref"sv)) {
+    return ctx.makeRefType(ctx.makeNoneType(), Nullable);
+  }
+  if (ctx.in.takeKeyword("nullexternref"sv)) {
+    return ctx.makeRefType(ctx.makeNoextType(), Nullable);
+  }
+  if (ctx.in.takeKeyword("nullfuncref"sv)) {
+    return ctx.makeRefType(ctx.makeNofuncType(), Nullable);
+  }
+  if (ctx.in.takeKeyword("nullexnref"sv)) {
+    return ctx.makeRefType(ctx.makeNoexnType(), Nullable);
   }
 
   if (!ctx.in.takeSExprStart("ref"sv)) {
@@ -294,15 +510,34 @@ template<typename Ctx> MaybeResult<typename Ctx::TypeT> reftype(Ctx& ctx) {
   return ctx.makeRefType(*type, nullability);
 }
 
+// tupletype ::= '(' 'tuple' valtype* ')'
+template<typename Ctx> MaybeResult<typename Ctx::TypeT> tupletype(Ctx& ctx) {
+  if (!ctx.in.takeSExprStart("tuple"sv)) {
+    return {};
+  }
+  auto elems = ctx.makeTupleElemList();
+  size_t numElems = 0;
+  while (!ctx.in.takeRParen()) {
+    auto elem = singlevaltype(ctx);
+    CHECK_ERR(elem);
+    ctx.appendTupleElem(elems, *elem);
+    ++numElems;
+  }
+  if (numElems < 2) {
+    return ctx.in.err("tuples must have at least two elements");
+  }
+  return ctx.makeTupleType(elems);
+}
+
 // numtype ::= 'i32' => i32
 //           | 'i64' => i64
 //           | 'f32' => f32
 //           | 'f64' => f64
 // vectype ::= 'v128' => v128
-// valtype ::= t:numtype => t
-//           | t:vectype => t
-//           | t:reftype => t
-template<typename Ctx> Result<typename Ctx::TypeT> valtype(Ctx& ctx) {
+// singlevaltype ::= t:numtype => t
+//                 | t:vectype => t
+//                 | t:reftype => t
+template<typename Ctx> Result<typename Ctx::TypeT> singlevaltype(Ctx& ctx) {
   if (ctx.in.takeKeyword("i32"sv)) {
     return ctx.makeI32();
   } else if (ctx.in.takeKeyword("i64"sv)) {
@@ -319,6 +554,15 @@ template<typename Ctx> Result<typename Ctx::TypeT> valtype(Ctx& ctx) {
   } else {
     return ctx.in.err("expected valtype");
   }
+}
+
+// valtype ::= singlevaltype | tupletype
+template<typename Ctx> Result<typename Ctx::TypeT> valtype(Ctx& ctx) {
+  if (auto type = tupletype(ctx)) {
+    CHECK_ERR(type);
+    return *type;
+  }
+  return singlevaltype(ctx);
 }
 
 // param  ::= '(' 'param id? t:valtype ')' => [t]
@@ -448,7 +692,7 @@ template<typename Ctx> Result<typename Ctx::FieldT> fieldtype(Ctx& ctx) {
 template<typename Ctx> Result<typename Ctx::FieldsT> fields(Ctx& ctx) {
   auto res = ctx.makeFields();
   while (true) {
-    if (auto t = ctx.in.peek(); !t || t->isRParen()) {
+    if (ctx.in.empty() || ctx.in.peekRParen()) {
       return res;
     }
     if (ctx.in.takeSExprStart("field")) {
@@ -542,6 +786,18 @@ template<typename Ctx> Result<typename Ctx::MemTypeT> memtype(Ctx& ctx) {
   return ctx.makeMemType(type, *limits, shared);
 }
 
+// tabletype ::= limits32 reftype
+template<typename Ctx> Result<typename Ctx::TableTypeT> tabletype(Ctx& ctx) {
+  auto limits = limits32(ctx);
+  CHECK_ERR(limits);
+  auto type = reftype(ctx);
+  CHECK_ERR(type);
+  if (!type) {
+    return ctx.in.err("expected reftype");
+  }
+  return ctx.makeTableType(*limits, *type);
+}
+
 // globaltype ::= t:valtype               => const t
 //              | '(' 'mut' t:valtype ')' => var t
 template<typename Ctx> Result<typename Ctx::GlobalTypeT> globaltype(Ctx& ctx) {
@@ -560,51 +816,91 @@ template<typename Ctx> Result<typename Ctx::GlobalTypeT> globaltype(Ctx& ctx) {
   return ctx.makeGlobalType(mutability, *type);
 }
 
+// arity ::= x:u32    (if x >=2 )
+template<typename Ctx> Result<uint32_t> tupleArity(Ctx& ctx) {
+  auto arity = ctx.in.takeU32();
+  if (!arity) {
+    return ctx.in.err("expected tuple arity");
+  }
+  if (*arity < 2) {
+    return ctx.in.err("tuple arity must be at least 2");
+  }
+  return *arity;
+}
+
 // ============
 // Instructions
 // ============
 
-// blockinstr ::= block | loop | if-else | try-catch
-template<typename Ctx> MaybeResult<> foldedBlockinstr(Ctx& ctx) {
-  if (auto i = block(ctx, true)) {
+template<typename Ctx>
+void setSrcLoc(Ctx& ctx, const std::vector<Annotation>& annotations) {
+  for (const auto& annotation : annotations) {
+    if (annotation.kind == srcAnnotationKind) {
+      ctx.setSrcLoc(annotation);
+    }
+  }
+}
+
+// blockinstr ::= block | loop | if-else | try-catch | try_table
+template<typename Ctx>
+MaybeResult<> foldedBlockinstr(Ctx& ctx,
+                               const std::vector<Annotation>& annotations) {
+  setSrcLoc(ctx, annotations);
+  if (auto i = block(ctx, annotations, true)) {
     return i;
   }
-  if (auto i = ifelse(ctx, true)) {
+  if (auto i = ifelse(ctx, annotations, true)) {
     return i;
   }
-  if (auto i = loop(ctx, true)) {
+  if (auto i = loop(ctx, annotations, true)) {
     return i;
   }
-  // TODO: Other block instructions
+  if (auto i = trycatch(ctx, annotations, true)) {
+    return i;
+  }
+  if (auto i = trytable(ctx, annotations, true)) {
+    return i;
+  }
   return {};
 }
 
-template<typename Ctx> MaybeResult<> unfoldedBlockinstr(Ctx& ctx) {
-  if (auto i = block(ctx, false)) {
+template<typename Ctx>
+MaybeResult<> unfoldedBlockinstr(Ctx& ctx,
+                                 const std::vector<Annotation>& annotations) {
+  setSrcLoc(ctx, annotations);
+  if (auto i = block(ctx, annotations, false)) {
     return i;
   }
-  if (auto i = ifelse(ctx, false)) {
+  if (auto i = ifelse(ctx, annotations, false)) {
     return i;
   }
-  if (auto i = loop(ctx, false)) {
+  if (auto i = loop(ctx, annotations, false)) {
     return i;
   }
-  // TODO: Other block instructions
+  if (auto i = trycatch(ctx, annotations, false)) {
+    return i;
+  }
+  if (auto i = trytable(ctx, annotations, false)) {
+    return i;
+  }
   return {};
 }
 
-template<typename Ctx> MaybeResult<> blockinstr(Ctx& ctx) {
-  if (auto i = foldedBlockinstr(ctx)) {
+template<typename Ctx>
+MaybeResult<> blockinstr(Ctx& ctx, const std::vector<Annotation>& annotations) {
+  if (auto i = foldedBlockinstr(ctx, annotations)) {
     return i;
   }
-  if (auto i = unfoldedBlockinstr(ctx)) {
+  if (auto i = unfoldedBlockinstr(ctx, annotations)) {
     return i;
   }
   return {};
 }
 
 // plaininstr ::= ... all plain instructions ...
-template<typename Ctx> MaybeResult<> plaininstr(Ctx& ctx) {
+template<typename Ctx>
+MaybeResult<> plaininstr(Ctx& ctx, const std::vector<Annotation>& annotations) {
+  setSrcLoc(ctx, annotations);
   auto pos = ctx.in.getPos();
   auto keyword = ctx.in.takeKeyword();
   if (!keyword) {
@@ -619,17 +915,17 @@ template<typename Ctx> MaybeResult<> plaininstr(Ctx& ctx) {
 // instr ::= plaininstr | blockinstr
 template<typename Ctx> MaybeResult<> instr(Ctx& ctx) {
   // Check for valid strings that are not instructions.
-  if (auto tok = ctx.in.peek()) {
-    if (auto keyword = tok->getKeyword()) {
-      if (keyword == "end"sv || keyword == "then"sv || keyword == "else"sv) {
-        return {};
-      }
+  if (auto keyword = ctx.in.peekKeyword()) {
+    if (keyword == "end"sv || keyword == "then"sv || keyword == "else"sv ||
+        keyword == "catch"sv || keyword == "catch_all"sv ||
+        keyword == "delegate"sv || keyword == "ref"sv) {
+      return {};
     }
   }
-  if (auto inst = blockinstr(ctx)) {
+  if (auto inst = blockinstr(ctx, ctx.in.getAnnotations())) {
     return inst;
   }
-  if (auto inst = plaininstr(ctx)) {
+  if (auto inst = plaininstr(ctx, ctx.in.getAnnotations())) {
     return inst;
   }
   // TODO: Handle folded plain instructions as well.
@@ -637,62 +933,73 @@ template<typename Ctx> MaybeResult<> instr(Ctx& ctx) {
 }
 
 template<typename Ctx> MaybeResult<> foldedinstr(Ctx& ctx) {
-  // Check for valid strings that are not instructions.
-  if (ctx.in.peekSExprStart("then"sv) || ctx.in.peekSExprStart("else")) {
+  // We must have an '(' to start a folded instruction.
+  if (!ctx.in.peekLParen()) {
     return {};
   }
-  if (auto inst = foldedBlockinstr(ctx)) {
-    return inst;
-  }
-  if (!ctx.in.takeLParen()) {
+
+  // Check for valid strings that look like folded instructions but are not.
+  if (ctx.in.peekSExprStart("then"sv) || ctx.in.peekSExprStart("else")) {
     return {};
   }
 
   // A stack of (start, end) position pairs defining the positions of
   // instructions that need to be parsed after their folded children.
-  std::vector<std::pair<Index, std::optional<Index>>> foldedInstrs;
+  struct InstrInfo {
+    size_t start;
+    std::optional<size_t> end;
+    std::vector<Annotation> annotations;
+  };
+  std::vector<InstrInfo> foldedInstrs;
 
-  // Begin a folded instruction. Push its start position and a placeholder
-  // end position.
-  foldedInstrs.push_back({ctx.in.getPos(), {}});
-  while (!foldedInstrs.empty()) {
-    // Consume everything up to the next paren. This span will be parsed as
-    // an instruction later after its folded children have been parsed.
-    if (!ctx.in.takeUntilParen()) {
-      return ctx.in.err(foldedInstrs.back().first,
-                        "unterminated folded instruction");
-    }
-
-    if (!foldedInstrs.back().second) {
-      // The folded instruction we just started should end here.
-      foldedInstrs.back().second = ctx.in.getPos();
-    }
-
-    // We have either the start of a new folded child or the end of the last
-    // one.
-    if (auto blockinst = foldedBlockinstr(ctx)) {
-      CHECK_ERR(blockinst);
-    } else if (ctx.in.takeLParen()) {
-      foldedInstrs.push_back({ctx.in.getPos(), {}});
-    } else if (ctx.in.takeRParen()) {
-      auto [start, end] = foldedInstrs.back();
-      assert(end && "Should have found end of instruction");
+  do {
+    if (ctx.in.takeRParen()) {
+      // We've reached the end of a folded instruction. Parse it for real.
+      auto info = std::move(foldedInstrs.back());
+      if (!info.end) {
+        return ctx.in.err("unexpected end of folded instruction");
+      }
       foldedInstrs.pop_back();
 
-      WithPosition with(ctx, start);
-      if (auto inst = plaininstr(ctx)) {
-        CHECK_ERR(inst);
-      } else {
-        return ctx.in.err(start, "expected folded instruction");
-      }
-
-      if (ctx.in.getPos() != *end) {
-        return ctx.in.err("expected end of instruction");
-      }
-    } else {
-      WASM_UNREACHABLE("expected paren");
+      WithPosition with(ctx, info.start);
+      auto inst = plaininstr(ctx, std::move(info.annotations));
+      assert(inst && "unexpectedly failed to parse instruction");
+      CHECK_ERR(inst);
+      assert(ctx.in.getPos() == *info.end && "expected end of instruction");
+      continue;
     }
-  }
+
+    auto annotations = ctx.in.takeAnnotations();
+
+    // We're not ending an instruction, so we must be starting a new one. Maybe
+    // it is a block instruction.
+    if (auto blockinst = foldedBlockinstr(ctx, annotations)) {
+      CHECK_ERR(blockinst);
+      continue;
+    }
+
+    // We must be starting a new plain instruction.
+    if (!ctx.in.takeLParen()) {
+      return ctx.in.err("expected folded instruction");
+    }
+    foldedInstrs.push_back({ctx.in.getPos(), {}, std::move(annotations)});
+
+    // Consume the span for the instruction without meaningfully parsing it yet.
+    // It will be parsed for real using the real context after its s-expression
+    // children have been found and parsed.
+    NullCtx nullCtx(ctx.in);
+    if (auto inst = plaininstr(nullCtx, {})) {
+      CHECK_ERR(inst);
+      ctx.in = nullCtx.in;
+    } else {
+      return ctx.in.err("expected instruction");
+    }
+
+    // The folded instruction we just started ends here.
+    assert(!foldedInstrs.back().end);
+    foldedInstrs.back().end = ctx.in.getPos();
+  } while (!foldedInstrs.empty());
+
   return Ok{};
 }
 
@@ -752,7 +1059,7 @@ template<typename Ctx> Result<typename Ctx::BlockTypeT> blocktype(Ctx& ctx) {
 
   // We either had no results or multiple results. Reset and parse again as a
   // type use.
-  ctx.in.lexer.setIndex(pos);
+  ctx.in.setIndex(pos);
   auto use = typeuse(ctx);
   CHECK_ERR(use);
 
@@ -763,7 +1070,9 @@ template<typename Ctx> Result<typename Ctx::BlockTypeT> blocktype(Ctx& ctx) {
 
 // block ::= 'block' label blocktype instr* 'end' id?   if id = {} or id = label
 //         | '(' 'block' label blocktype instr* ')'
-template<typename Ctx> MaybeResult<> block(Ctx& ctx, bool folded) {
+template<typename Ctx>
+MaybeResult<>
+block(Ctx& ctx, const std::vector<Annotation>& annotations, bool folded) {
   auto pos = ctx.in.getPos();
 
   if ((folded && !ctx.in.takeSExprStart("block"sv)) ||
@@ -776,7 +1085,7 @@ template<typename Ctx> MaybeResult<> block(Ctx& ctx, bool folded) {
   auto type = blocktype(ctx);
   CHECK_ERR(type);
 
-  ctx.makeBlock(pos, label, *type);
+  ctx.makeBlock(pos, annotations, label, *type);
 
   CHECK_ERR(instrs(ctx));
 
@@ -800,7 +1109,9 @@ template<typename Ctx> MaybeResult<> block(Ctx& ctx, bool folded) {
 // if ::= 'if' label blocktype instr1* ('else' id1? instr2*)? 'end' id2?
 //      | '(' 'if' label blocktype foldedinstr* '(' 'then' instr1* ')'
 //            ('(' 'else' instr2* ')')? ')'
-template<typename Ctx> MaybeResult<> ifelse(Ctx& ctx, bool folded) {
+template<typename Ctx>
+MaybeResult<>
+ifelse(Ctx& ctx, const std::vector<Annotation>& annotations, bool folded) {
   auto pos = ctx.in.getPos();
 
   if ((folded && !ctx.in.takeSExprStart("if"sv)) ||
@@ -817,7 +1128,7 @@ template<typename Ctx> MaybeResult<> ifelse(Ctx& ctx, bool folded) {
     CHECK_ERR(foldedinstrs(ctx));
   }
 
-  ctx.makeIf(pos, label, *type);
+  ctx.makeIf(pos, annotations, label, *type);
 
   if (folded && !ctx.in.takeSExprStart("then"sv)) {
     return ctx.in.err("expected 'then' before if instructions");
@@ -862,9 +1173,11 @@ template<typename Ctx> MaybeResult<> ifelse(Ctx& ctx, bool folded) {
   return ctx.visitEnd();
 }
 
-// loop ::= 'loop' label blocktype instr* end id?
+// loop ::= 'loop' label blocktype instr* 'end' id?
 //        | '(' 'loop' label blocktype instr* ')'
-template<typename Ctx> MaybeResult<> loop(Ctx& ctx, bool folded) {
+template<typename Ctx>
+MaybeResult<>
+loop(Ctx& ctx, const std::vector<Annotation>& annotations, bool folded) {
   auto pos = ctx.in.getPos();
 
   if ((folded && !ctx.in.takeSExprStart("loop"sv)) ||
@@ -877,7 +1190,7 @@ template<typename Ctx> MaybeResult<> loop(Ctx& ctx, bool folded) {
   auto type = blocktype(ctx);
   CHECK_ERR(type);
 
-  ctx.makeLoop(pos, label, *type);
+  ctx.makeLoop(pos, annotations, label, *type);
 
   CHECK_ERR(instrs(ctx));
 
@@ -897,103 +1210,438 @@ template<typename Ctx> MaybeResult<> loop(Ctx& ctx, bool folded) {
   return ctx.visitEnd();
 }
 
-template<typename Ctx> Result<> makeUnreachable(Ctx& ctx, Index pos) {
-  return ctx.makeUnreachable(pos);
+// trycatch ::= 'try' label blocktype instr* ('catch' id? tagidx instr*)*
+//                  ('catch_all' id? instr*)? 'end' id?
+//            | '(' 'try' label blocktype '(' 'do' instr* ')'
+//                  ('(' 'catch' tagidx instr* ')')*
+//                  ('(' 'catch_all' instr* ')')? ')'
+//            | 'try' label blocktype instr* 'deledate' label
+//            | '(' 'try' label blocktype '(' 'do' instr* ')'
+//                '(' 'delegate' label ')' ')'
+template<typename Ctx>
+MaybeResult<>
+trycatch(Ctx& ctx, const std::vector<Annotation>& annotations, bool folded) {
+  auto pos = ctx.in.getPos();
+
+  if ((folded && !ctx.in.takeSExprStart("try"sv)) ||
+      (!folded && !ctx.in.takeKeyword("try"sv))) {
+    return {};
+  }
+
+  auto label = ctx.in.takeID();
+
+  auto type = blocktype(ctx);
+  CHECK_ERR(type);
+
+  CHECK_ERR(ctx.makeTry(pos, annotations, label, *type));
+
+  if (folded) {
+    if (!ctx.in.takeSExprStart("do"sv)) {
+      return ctx.in.err("expected 'do' in try");
+    }
+  }
+
+  CHECK_ERR(instrs(ctx));
+
+  if (folded) {
+    if (!ctx.in.takeRParen()) {
+      return ctx.in.err("expected ')' at end of do");
+    }
+  }
+
+  if ((folded && ctx.in.takeSExprStart("delegate")) ||
+      (!folded && ctx.in.takeKeyword("delegate"))) {
+    auto delegatePos = ctx.in.getPos();
+
+    auto label = labelidx(ctx, true);
+    CHECK_ERR(label);
+
+    if (folded) {
+      if (!ctx.in.takeRParen()) {
+        return ctx.in.err("expected ')' at end of delegate");
+      }
+      if (!ctx.in.takeRParen()) {
+        return ctx.in.err("expected ')' at end of try");
+      }
+    }
+
+    CHECK_ERR(ctx.visitDelegate(delegatePos, *label));
+    return Ok{};
+  }
+
+  while (true) {
+    auto catchPos = ctx.in.getPos();
+
+    if ((folded && !ctx.in.takeSExprStart("catch"sv)) ||
+        (!folded && !ctx.in.takeKeyword("catch"sv))) {
+      break;
+    }
+
+    // It can be ambiguous whether the name after `catch` is intended to be the
+    // optional ID or the tag identifier. For example:
+    //
+    // (tag $t)
+    // (func $ambiguous
+    //   try $t
+    //   catch $t
+    //   end
+    // )
+    //
+    // When parsing the `catch`, the parser first tries to parse an optional ID
+    // that must match the label of the `try`, and it succeeds because it sees
+    // `$t` after the catch. However, when it then tries to parse the mandatory
+    // tag index, it fails because the next token is `end`. The problem is that
+    // the `$t` after the `catch` was the tag name and there was no optional ID
+    // after all. The parser sets `parseID = false` and resets to just after the
+    // `catch`, and now it skips parsing the optional ID so it correctly parses
+    // the `$t` as a tag name.
+    bool parseID = !folded;
+    auto afterCatchPos = ctx.in.getPos();
+    while (true) {
+      if (!folded && parseID) {
+        auto id = ctx.in.takeID();
+        if (id && id != label) {
+          // Instead of returning an error, retry without the ID.
+          parseID = false;
+          ctx.in.setIndex(afterCatchPos);
+          continue;
+        }
+      }
+
+      auto tag = tagidx(ctx);
+      if (parseID && tag.getErr()) {
+        // Instead of returning an error, retry without the ID.
+        parseID = false;
+        ctx.in.setIndex(afterCatchPos);
+        continue;
+      }
+      CHECK_ERR(tag);
+
+      CHECK_ERR(ctx.visitCatch(catchPos, *tag));
+
+      CHECK_ERR(instrs(ctx));
+
+      if (folded) {
+        if (!ctx.in.takeRParen()) {
+          return ctx.in.err("expected ')' at end of catch");
+        }
+      }
+      break;
+    }
+  }
+
+  if ((folded && ctx.in.takeSExprStart("catch_all"sv)) ||
+      (!folded && ctx.in.takeKeyword("catch_all"sv))) {
+    auto catchPos = ctx.in.getPos();
+
+    if (!folded) {
+      auto id = ctx.in.takeID();
+      if (id && id != label) {
+        return ctx.in.err("catch_all label does not match try label");
+      }
+    }
+
+    CHECK_ERR(ctx.visitCatchAll(catchPos));
+
+    CHECK_ERR(instrs(ctx));
+
+    if (folded) {
+      if (!ctx.in.takeRParen()) {
+        return ctx.in.err("expected ')' at end of catch_all");
+      }
+    }
+  }
+
+  if (folded) {
+    if (!ctx.in.takeRParen()) {
+      return ctx.in.err("expected ')' at end of try");
+    }
+  } else {
+    if (!ctx.in.takeKeyword("end"sv)) {
+      return ctx.in.err("expected 'end' at end of try");
+    }
+
+    auto id = ctx.in.takeID();
+    if (id && id != label) {
+      return ctx.in.err("end label does not match try label");
+    }
+  }
+  return ctx.visitEnd();
 }
 
-template<typename Ctx> Result<> makeNop(Ctx& ctx, Index pos) {
-  return ctx.makeNop(pos);
+template<typename Ctx> MaybeResult<typename Ctx::CatchT> catchinstr(Ctx& ctx) {
+  typename Ctx::CatchT result;
+  if (ctx.in.takeSExprStart("catch"sv)) {
+    auto tag = tagidx(ctx);
+    CHECK_ERR(tag);
+    auto label = labelidx(ctx);
+    CHECK_ERR(label);
+    result = ctx.makeCatch(*tag, *label);
+  } else if (ctx.in.takeSExprStart("catch_ref"sv)) {
+    auto tag = tagidx(ctx);
+    CHECK_ERR(tag);
+    auto label = labelidx(ctx);
+    CHECK_ERR(label);
+    result = ctx.makeCatchRef(*tag, *label);
+  } else if (ctx.in.takeSExprStart("catch_all"sv)) {
+    auto label = labelidx(ctx);
+    CHECK_ERR(label);
+    result = ctx.makeCatchAll(*label);
+  } else if (ctx.in.takeSExprStart("catch_all_ref"sv)) {
+    auto label = labelidx(ctx);
+    CHECK_ERR(label);
+    result = ctx.makeCatchAllRef(*label);
+  } else {
+    return {};
+  }
+
+  if (!ctx.in.takeRParen()) {
+    return ctx.in.err("expected ')' at end of catch clause");
+  }
+
+  return result;
 }
 
-template<typename Ctx> Result<> makeBinary(Ctx& ctx, Index pos, BinaryOp op) {
-  return ctx.makeBinary(pos, op);
+// trytable ::= 'try_table' label blocktype catchinstr* instr* 'end' id?
+//            | '(' 'try_table' label blocktype catchinstr* instr* ')'
+template<typename Ctx>
+MaybeResult<>
+trytable(Ctx& ctx, const std::vector<Annotation>& annotations, bool folded) {
+  auto pos = ctx.in.getPos();
+
+  if ((folded && !ctx.in.takeSExprStart("try_table"sv)) ||
+      (!folded && !ctx.in.takeKeyword("try_table"sv))) {
+    return {};
+  }
+
+  auto label = ctx.in.takeID();
+
+  auto type = blocktype(ctx);
+  CHECK_ERR(type);
+
+  auto catches = ctx.makeCatchList();
+  while (auto c = catchinstr(ctx)) {
+    CHECK_ERR(c);
+    ctx.appendCatch(catches, *c);
+  }
+
+  CHECK_ERR(ctx.makeTryTable(pos, annotations, label, *type, catches));
+
+  CHECK_ERR(instrs(ctx));
+
+  if (folded) {
+    if (!ctx.in.takeRParen()) {
+      return ctx.in.err("expected ')' at end of try_table");
+    }
+  } else {
+    if (!ctx.in.takeKeyword("end"sv)) {
+      return ctx.in.err("expected 'end' at end of try_table");
+    }
+
+    auto id = ctx.in.takeID();
+    if (id && id != label) {
+      return ctx.in.err("end label does not match try_table label");
+    }
+  }
+  return ctx.visitEnd();
 }
 
-template<typename Ctx> Result<> makeUnary(Ctx& ctx, Index pos, UnaryOp op) {
-  return ctx.makeUnary(pos, op);
+template<typename Ctx>
+Result<> makeUnreachable(Ctx& ctx,
+                         Index pos,
+                         const std::vector<Annotation>& annotations) {
+  return ctx.makeUnreachable(pos, annotations);
 }
 
-template<typename Ctx> Result<> makeSelect(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<>
+makeNop(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  return ctx.makeNop(pos, annotations);
+}
+
+template<typename Ctx>
+Result<> makeBinary(Ctx& ctx,
+                    Index pos,
+                    const std::vector<Annotation>& annotations,
+                    BinaryOp op) {
+  return ctx.makeBinary(pos, annotations, op);
+}
+
+template<typename Ctx>
+Result<> makeUnary(Ctx& ctx,
+                   Index pos,
+                   const std::vector<Annotation>& annotations,
+                   UnaryOp op) {
+  return ctx.makeUnary(pos, annotations, op);
+}
+
+template<typename Ctx>
+Result<>
+makeSelect(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
   auto res = results(ctx);
   CHECK_ERR(res);
-  return ctx.makeSelect(pos, res.getPtr());
+  return ctx.makeSelect(pos, annotations, res.getPtr());
 }
 
-template<typename Ctx> Result<> makeDrop(Ctx& ctx, Index pos) {
-  return ctx.makeDrop(pos);
+template<typename Ctx>
+Result<>
+makeDrop(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  return ctx.makeDrop(pos, annotations);
 }
 
-template<typename Ctx> Result<> makeMemorySize(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<> makeMemorySize(Ctx& ctx,
+                        Index pos,
+                        const std::vector<Annotation>& annotations) {
   auto mem = maybeMemidx(ctx);
   CHECK_ERR(mem);
-  return ctx.makeMemorySize(pos, mem.getPtr());
+  return ctx.makeMemorySize(pos, annotations, mem.getPtr());
 }
 
-template<typename Ctx> Result<> makeMemoryGrow(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<> makeMemoryGrow(Ctx& ctx,
+                        Index pos,
+                        const std::vector<Annotation>& annotations) {
   auto mem = maybeMemidx(ctx);
   CHECK_ERR(mem);
-  return ctx.makeMemoryGrow(pos, mem.getPtr());
+  return ctx.makeMemoryGrow(pos, annotations, mem.getPtr());
 }
 
-template<typename Ctx> Result<> makeLocalGet(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<>
+makeLocalGet(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
   auto local = localidx(ctx);
   CHECK_ERR(local);
-  return ctx.makeLocalGet(pos, *local);
+  return ctx.makeLocalGet(pos, annotations, *local);
 }
 
-template<typename Ctx> Result<> makeLocalTee(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<>
+makeLocalTee(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
   auto local = localidx(ctx);
   CHECK_ERR(local);
-  return ctx.makeLocalTee(pos, *local);
+  return ctx.makeLocalTee(pos, annotations, *local);
 }
 
-template<typename Ctx> Result<> makeLocalSet(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<>
+makeLocalSet(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
   auto local = localidx(ctx);
   CHECK_ERR(local);
-  return ctx.makeLocalSet(pos, *local);
+  return ctx.makeLocalSet(pos, annotations, *local);
 }
 
-template<typename Ctx> Result<> makeGlobalGet(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<>
+makeGlobalGet(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
   auto global = globalidx(ctx);
   CHECK_ERR(global);
-  return ctx.makeGlobalGet(pos, *global);
+  return ctx.makeGlobalGet(pos, annotations, *global);
 }
 
-template<typename Ctx> Result<> makeGlobalSet(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<>
+makeGlobalSet(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
   auto global = globalidx(ctx);
   CHECK_ERR(global);
-  return ctx.makeGlobalSet(pos, *global);
+  return ctx.makeGlobalSet(pos, annotations, *global);
 }
 
-template<typename Ctx> Result<> makeBlock(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeConst(Ctx& ctx, Index pos, Type type) {
+template<typename Ctx>
+Result<> makeConst(Ctx& ctx,
+                   Index pos,
+                   const std::vector<Annotation>& annotations,
+                   Type type) {
   assert(type.isBasic());
   switch (type.getBasic()) {
     case Type::i32:
       if (auto c = ctx.in.takeI32()) {
-        return ctx.makeI32Const(pos, *c);
+        return ctx.makeI32Const(pos, annotations, *c);
       }
       return ctx.in.err("expected i32");
     case Type::i64:
       if (auto c = ctx.in.takeI64()) {
-        return ctx.makeI64Const(pos, *c);
+        return ctx.makeI64Const(pos, annotations, *c);
       }
       return ctx.in.err("expected i64");
     case Type::f32:
       if (auto c = ctx.in.takeF32()) {
-        return ctx.makeF32Const(pos, *c);
+        return ctx.makeF32Const(pos, annotations, *c);
       }
       return ctx.in.err("expected f32");
     case Type::f64:
       if (auto c = ctx.in.takeF64()) {
-        return ctx.makeF64Const(pos, *c);
+        return ctx.makeF64Const(pos, annotations, *c);
       }
       return ctx.in.err("expected f64");
     case Type::v128:
-      return ctx.in.err("unimplemented instruction");
+      if (ctx.in.takeKeyword("i8x16"sv)) {
+        std::array<uint8_t, 16> vals;
+        for (size_t i = 0; i < 16; ++i) {
+          auto val = ctx.in.takeI8();
+          if (!val) {
+            return ctx.in.err("expected i8 value");
+          }
+          vals[i] = *val;
+        }
+        return ctx.makeI8x16Const(pos, annotations, vals);
+      }
+      if (ctx.in.takeKeyword("i16x8"sv)) {
+        std::array<uint16_t, 8> vals;
+        for (size_t i = 0; i < 8; ++i) {
+          auto val = ctx.in.takeI16();
+          if (!val) {
+            return ctx.in.err("expected i16 value");
+          }
+          vals[i] = *val;
+        }
+        return ctx.makeI16x8Const(pos, annotations, vals);
+      }
+      if (ctx.in.takeKeyword("i32x4"sv)) {
+        std::array<uint32_t, 4> vals;
+        for (size_t i = 0; i < 4; ++i) {
+          auto val = ctx.in.takeI32();
+          if (!val) {
+            return ctx.in.err("expected i32 value");
+          }
+          vals[i] = *val;
+        }
+        return ctx.makeI32x4Const(pos, annotations, vals);
+      }
+      if (ctx.in.takeKeyword("i64x2"sv)) {
+        std::array<uint64_t, 2> vals;
+        for (size_t i = 0; i < 2; ++i) {
+          auto val = ctx.in.takeI64();
+          if (!val) {
+            return ctx.in.err("expected i64 value");
+          }
+          vals[i] = *val;
+        }
+        return ctx.makeI64x2Const(pos, annotations, vals);
+      }
+      if (ctx.in.takeKeyword("f32x4"sv)) {
+        std::array<float, 4> vals;
+        for (size_t i = 0; i < 4; ++i) {
+          auto val = ctx.in.takeF32();
+          if (!val) {
+            return ctx.in.err("expected f32 value");
+          }
+          vals[i] = *val;
+        }
+        return ctx.makeF32x4Const(pos, annotations, vals);
+      }
+      if (ctx.in.takeKeyword("f64x2"sv)) {
+        std::array<double, 2> vals;
+        for (size_t i = 0; i < 2; ++i) {
+          auto val = ctx.in.takeF64();
+          if (!val) {
+            return ctx.in.err("expected f64 value");
+          }
+          vals[i] = *val;
+        }
+        return ctx.makeF64x2Const(pos, annotations, vals);
+      }
+      return ctx.in.err("expected SIMD vector shape");
     case Type::none:
     case Type::unreachable:
       break;
@@ -1002,82 +1650,125 @@ template<typename Ctx> Result<> makeConst(Ctx& ctx, Index pos, Type type) {
 }
 
 template<typename Ctx>
-Result<> makeLoad(
-  Ctx& ctx, Index pos, Type type, bool signed_, int bytes, bool isAtomic) {
+Result<> makeLoad(Ctx& ctx,
+                  Index pos,
+                  const std::vector<Annotation>& annotations,
+                  Type type,
+                  bool signed_,
+                  int bytes,
+                  bool isAtomic) {
   auto mem = maybeMemidx(ctx);
   CHECK_ERR(mem);
   auto arg = memarg(ctx, bytes);
   CHECK_ERR(arg);
-  return ctx.makeLoad(pos, type, signed_, bytes, isAtomic, mem.getPtr(), *arg);
+  return ctx.makeLoad(
+    pos, annotations, type, signed_, bytes, isAtomic, mem.getPtr(), *arg);
 }
 
 template<typename Ctx>
-Result<> makeStore(Ctx& ctx, Index pos, Type type, int bytes, bool isAtomic) {
+Result<> makeStore(Ctx& ctx,
+                   Index pos,
+                   const std::vector<Annotation>& annotations,
+                   Type type,
+                   int bytes,
+                   bool isAtomic) {
   auto mem = maybeMemidx(ctx);
   CHECK_ERR(mem);
   auto arg = memarg(ctx, bytes);
   CHECK_ERR(arg);
-  return ctx.makeStore(pos, type, bytes, isAtomic, mem.getPtr(), *arg);
+  return ctx.makeStore(
+    pos, annotations, type, bytes, isAtomic, mem.getPtr(), *arg);
 }
 
 template<typename Ctx>
-Result<>
-makeAtomicRMW(Ctx& ctx, Index pos, AtomicRMWOp op, Type type, uint8_t bytes) {
+Result<> makeAtomicRMW(Ctx& ctx,
+                       Index pos,
+                       const std::vector<Annotation>& annotations,
+                       AtomicRMWOp op,
+                       Type type,
+                       uint8_t bytes) {
   auto mem = maybeMemidx(ctx);
   CHECK_ERR(mem);
   auto arg = memarg(ctx, bytes);
   CHECK_ERR(arg);
-  return ctx.makeAtomicRMW(pos, op, type, bytes, mem.getPtr(), *arg);
+  return ctx.makeAtomicRMW(
+    pos, annotations, op, type, bytes, mem.getPtr(), *arg);
 }
 
 template<typename Ctx>
-Result<> makeAtomicCmpxchg(Ctx& ctx, Index pos, Type type, uint8_t bytes) {
+Result<> makeAtomicCmpxchg(Ctx& ctx,
+                           Index pos,
+                           const std::vector<Annotation>& annotations,
+                           Type type,
+                           uint8_t bytes) {
   auto mem = maybeMemidx(ctx);
   CHECK_ERR(mem);
   auto arg = memarg(ctx, bytes);
   CHECK_ERR(arg);
-  return ctx.makeAtomicCmpxchg(pos, type, bytes, mem.getPtr(), *arg);
+  return ctx.makeAtomicCmpxchg(
+    pos, annotations, type, bytes, mem.getPtr(), *arg);
 }
 
-template<typename Ctx> Result<> makeAtomicWait(Ctx& ctx, Index pos, Type type) {
+template<typename Ctx>
+Result<> makeAtomicWait(Ctx& ctx,
+                        Index pos,
+                        const std::vector<Annotation>& annotations,
+                        Type type) {
   auto mem = maybeMemidx(ctx);
   CHECK_ERR(mem);
   auto arg = memarg(ctx, type == Type::i32 ? 4 : 8);
   CHECK_ERR(arg);
-  return ctx.makeAtomicWait(pos, type, mem.getPtr(), *arg);
+  return ctx.makeAtomicWait(pos, annotations, type, mem.getPtr(), *arg);
 }
 
-template<typename Ctx> Result<> makeAtomicNotify(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<> makeAtomicNotify(Ctx& ctx,
+                          Index pos,
+                          const std::vector<Annotation>& annotations) {
   auto mem = maybeMemidx(ctx);
   CHECK_ERR(mem);
   auto arg = memarg(ctx, 4);
   CHECK_ERR(arg);
-  return ctx.makeAtomicNotify(pos, mem.getPtr(), *arg);
-}
-
-template<typename Ctx> Result<> makeAtomicFence(Ctx& ctx, Index pos) {
-  return ctx.makeAtomicFence(pos);
+  return ctx.makeAtomicNotify(pos, annotations, mem.getPtr(), *arg);
 }
 
 template<typename Ctx>
-Result<> makeSIMDExtract(Ctx& ctx, Index pos, SIMDExtractOp op, size_t) {
+Result<> makeAtomicFence(Ctx& ctx,
+                         Index pos,
+                         const std::vector<Annotation>& annotations) {
+  return ctx.makeAtomicFence(pos, annotations);
+}
+
+template<typename Ctx>
+Result<> makeSIMDExtract(Ctx& ctx,
+                         Index pos,
+                         const std::vector<Annotation>& annotations,
+                         SIMDExtractOp op,
+                         size_t) {
   auto lane = ctx.in.takeU8();
   if (!lane) {
     return ctx.in.err("expected lane index");
   }
-  return ctx.makeSIMDExtract(pos, op, *lane);
+  return ctx.makeSIMDExtract(pos, annotations, op, *lane);
 }
 
 template<typename Ctx>
-Result<> makeSIMDReplace(Ctx& ctx, Index pos, SIMDReplaceOp op, size_t lanes) {
+Result<> makeSIMDReplace(Ctx& ctx,
+                         Index pos,
+                         const std::vector<Annotation>& annotations,
+                         SIMDReplaceOp op,
+                         size_t lanes) {
   auto lane = ctx.in.takeU8();
   if (!lane) {
     return ctx.in.err("expected lane index");
   }
-  return ctx.makeSIMDReplace(pos, op, *lane);
+  return ctx.makeSIMDReplace(pos, annotations, op, *lane);
 }
 
-template<typename Ctx> Result<> makeSIMDShuffle(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<> makeSIMDShuffle(Ctx& ctx,
+                         Index pos,
+                         const std::vector<Annotation>& annotations) {
   std::array<uint8_t, 16> lanes;
   for (int i = 0; i < 16; ++i) {
     auto lane = ctx.in.takeU8();
@@ -1086,31 +1777,44 @@ template<typename Ctx> Result<> makeSIMDShuffle(Ctx& ctx, Index pos) {
     }
     lanes[i] = *lane;
   }
-  return ctx.makeSIMDShuffle(pos, lanes);
+  return ctx.makeSIMDShuffle(pos, annotations, lanes);
 }
 
 template<typename Ctx>
-Result<> makeSIMDTernary(Ctx& ctx, Index pos, SIMDTernaryOp op) {
-  return ctx.makeSIMDTernary(pos, op);
+Result<> makeSIMDTernary(Ctx& ctx,
+                         Index pos,
+                         const std::vector<Annotation>& annotations,
+                         SIMDTernaryOp op) {
+  return ctx.makeSIMDTernary(pos, annotations, op);
 }
 
 template<typename Ctx>
-Result<> makeSIMDShift(Ctx& ctx, Index pos, SIMDShiftOp op) {
-  return ctx.makeSIMDShift(pos, op);
+Result<> makeSIMDShift(Ctx& ctx,
+                       Index pos,
+                       const std::vector<Annotation>& annotations,
+                       SIMDShiftOp op) {
+  return ctx.makeSIMDShift(pos, annotations, op);
 }
 
 template<typename Ctx>
-Result<> makeSIMDLoad(Ctx& ctx, Index pos, SIMDLoadOp op, int bytes) {
+Result<> makeSIMDLoad(Ctx& ctx,
+                      Index pos,
+                      const std::vector<Annotation>& annotations,
+                      SIMDLoadOp op,
+                      int bytes) {
   auto mem = maybeMemidx(ctx);
   CHECK_ERR(mem);
   auto arg = memarg(ctx, bytes);
   CHECK_ERR(arg);
-  return ctx.makeSIMDLoad(pos, op, mem.getPtr(), *arg);
+  return ctx.makeSIMDLoad(pos, annotations, op, mem.getPtr(), *arg);
 }
 
 template<typename Ctx>
-Result<>
-makeSIMDLoadStoreLane(Ctx& ctx, Index pos, SIMDLoadStoreLaneOp op, int bytes) {
+Result<> makeSIMDLoadStoreLane(Ctx& ctx,
+                               Index pos,
+                               const std::vector<Annotation>& annotations,
+                               SIMDLoadStoreLaneOp op,
+                               int bytes) {
   auto reset = ctx.in.getPos();
 
   auto retry = [&]() -> Result<> {
@@ -1123,7 +1827,8 @@ makeSIMDLoadStoreLane(Ctx& ctx, Index pos, SIMDLoadStoreLaneOp op, int bytes) {
     if (!lane) {
       return ctx.in.err("expected lane index");
     }
-    return ctx.makeSIMDLoadStoreLane(pos, op, nullptr, *arg, *lane);
+    return ctx.makeSIMDLoadStoreLane(
+      pos, annotations, op, nullptr, *arg, *lane);
   };
 
   auto mem = maybeMemidx(ctx);
@@ -1136,10 +1841,14 @@ makeSIMDLoadStoreLane(Ctx& ctx, Index pos, SIMDLoadStoreLaneOp op, int bytes) {
   if (!lane) {
     return retry();
   }
-  return ctx.makeSIMDLoadStoreLane(pos, op, mem.getPtr(), *arg, *lane);
+  return ctx.makeSIMDLoadStoreLane(
+    pos, annotations, op, mem.getPtr(), *arg, *lane);
 }
 
-template<typename Ctx> Result<> makeMemoryInit(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<> makeMemoryInit(Ctx& ctx,
+                        Index pos,
+                        const std::vector<Annotation>& annotations) {
   auto reset = ctx.in.getPos();
 
   auto retry = [&]() -> Result<> {
@@ -1148,7 +1857,7 @@ template<typename Ctx> Result<> makeMemoryInit(Ctx& ctx, Index pos) {
     WithPosition with(ctx, reset);
     auto data = dataidx(ctx);
     CHECK_ERR(data);
-    return ctx.makeMemoryInit(pos, nullptr, *data);
+    return ctx.makeMemoryInit(pos, annotations, nullptr, *data);
   };
 
   auto mem = maybeMemidx(ctx);
@@ -1159,16 +1868,21 @@ template<typename Ctx> Result<> makeMemoryInit(Ctx& ctx, Index pos) {
   if (data.getErr()) {
     return retry();
   }
-  return ctx.makeMemoryInit(pos, mem.getPtr(), *data);
+  return ctx.makeMemoryInit(pos, annotations, mem.getPtr(), *data);
 }
 
-template<typename Ctx> Result<> makeDataDrop(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<>
+makeDataDrop(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
   auto data = dataidx(ctx);
   CHECK_ERR(data);
-  return ctx.makeDataDrop(pos, *data);
+  return ctx.makeDataDrop(pos, annotations, *data);
 }
 
-template<typename Ctx> Result<> makeMemoryCopy(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<> makeMemoryCopy(Ctx& ctx,
+                        Index pos,
+                        const std::vector<Annotation>& annotations) {
   auto destMem = maybeMemidx(ctx);
   CHECK_ERR(destMem);
   std::optional<typename Ctx::MemoryIdxT> srcMem = std::nullopt;
@@ -1177,304 +1891,575 @@ template<typename Ctx> Result<> makeMemoryCopy(Ctx& ctx, Index pos) {
     CHECK_ERR(mem);
     srcMem = *mem;
   }
-  return ctx.makeMemoryCopy(pos, destMem.getPtr(), srcMem ? &*srcMem : nullptr);
+  return ctx.makeMemoryCopy(
+    pos, annotations, destMem.getPtr(), srcMem ? &*srcMem : nullptr);
 }
 
-template<typename Ctx> Result<> makeMemoryFill(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<> makeMemoryFill(Ctx& ctx,
+                        Index pos,
+                        const std::vector<Annotation>& annotations) {
   auto mem = maybeMemidx(ctx);
   CHECK_ERR(mem);
-  return ctx.makeMemoryFill(pos, mem.getPtr());
-}
-
-template<typename Ctx> Result<> makePop(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeIf(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
+  return ctx.makeMemoryFill(pos, annotations, mem.getPtr());
 }
 
 template<typename Ctx>
-Result<> makeMaybeBlock(Ctx& ctx, Index pos, size_t i, Type type) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeLoop(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeCall(Ctx& ctx, Index pos, bool isReturn) {
-  return ctx.in.err("unimplemented instruction");
+Result<>
+makePop(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  auto type = valtype(ctx);
+  CHECK_ERR(type);
+  return ctx.makePop(pos, annotations, *type);
 }
 
 template<typename Ctx>
-Result<> makeCallIndirect(Ctx& ctx, Index pos, bool isReturn) {
-  return ctx.in.err("unimplemented instruction");
+Result<> makeCall(Ctx& ctx,
+                  Index pos,
+                  const std::vector<Annotation>& annotations,
+                  bool isReturn) {
+  auto func = funcidx(ctx);
+  CHECK_ERR(func);
+  return ctx.makeCall(pos, annotations, *func, isReturn);
 }
 
-template<typename Ctx> Result<> makeBreak(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<> makeCallIndirect(Ctx& ctx,
+                          Index pos,
+                          const std::vector<Annotation>& annotations,
+                          bool isReturn) {
+  auto table = maybeTableidx(ctx);
+  CHECK_ERR(table);
+  auto type = typeuse(ctx);
+  CHECK_ERR(type);
+  return ctx.makeCallIndirect(
+    pos, annotations, table.getPtr(), *type, isReturn);
+}
+
+template<typename Ctx>
+Result<> makeBreak(Ctx& ctx,
+                   Index pos,
+                   const std::vector<Annotation>& annotations,
+                   bool isConditional) {
   auto label = labelidx(ctx);
   CHECK_ERR(label);
-  return ctx.makeBreak(pos, *label);
+  return ctx.makeBreak(pos, annotations, *label, isConditional);
 }
 
-template<typename Ctx> Result<> makeBreakTable(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
+template<typename Ctx>
+Result<> makeBreakTable(Ctx& ctx,
+                        Index pos,
+                        const std::vector<Annotation>& annotations) {
+  std::vector<typename Ctx::LabelIdxT> labels;
+  while (true) {
+    // Parse at least one label; return an error only if we parse none.
+    auto label = labelidx(ctx);
+    if (labels.empty()) {
+      CHECK_ERR(label);
+    } else if (label.getErr()) {
+      break;
+    }
+    labels.push_back(*label);
+  }
+  auto defaultLabel = labels.back();
+  labels.pop_back();
+  return ctx.makeSwitch(pos, annotations, labels, defaultLabel);
 }
 
-template<typename Ctx> Result<> makeReturn(Ctx& ctx, Index pos) {
-  return ctx.makeReturn(pos);
+template<typename Ctx>
+Result<>
+makeReturn(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  return ctx.makeReturn(pos, annotations);
 }
 
-template<typename Ctx> Result<> makeRefNull(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<>
+makeRefNull(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
   auto t = heaptype(ctx);
   CHECK_ERR(t);
-  return ctx.makeRefNull(pos, *t);
-}
-
-template<typename Ctx> Result<> makeRefIsNull(Ctx& ctx, Index pos) {
-  return ctx.makeRefIsNull(pos);
-}
-
-template<typename Ctx> Result<> makeRefFunc(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeRefEq(Ctx& ctx, Index pos) {
-  return ctx.makeRefEq(pos);
-}
-
-template<typename Ctx> Result<> makeTableGet(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeTableSet(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeTableSize(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeTableGrow(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeTableFill(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeTry(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
+  return ctx.makeRefNull(pos, annotations, *t);
 }
 
 template<typename Ctx>
-Result<> makeTryOrCatchBody(Ctx& ctx, Index pos, Type type, bool isTry) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeThrow(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeRethrow(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeTupleMake(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeTupleExtract(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
+Result<>
+makeRefIsNull(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  return ctx.makeRefIsNull(pos, annotations);
 }
 
 template<typename Ctx>
-Result<> makeCallRef(Ctx& ctx, Index pos, bool isReturn) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeRefI31(Ctx& ctx, Index pos) {
-  return ctx.makeRefI31(pos);
-}
-
-template<typename Ctx> Result<> makeI31Get(Ctx& ctx, Index pos, bool signed_) {
-  return ctx.makeI31Get(pos, signed_);
-}
-
-template<typename Ctx> Result<> makeRefTest(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeRefCast(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeBrOnNull(Ctx& ctx, Index pos, bool onFail) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeBrOnCast(Ctx& ctx, Index pos, bool onFail) {
-  return ctx.in.err("unimplemented instruction");
+Result<>
+makeRefFunc(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  auto func = funcidx(ctx);
+  CHECK_ERR(func);
+  return ctx.makeRefFunc(pos, annotations, *func);
 }
 
 template<typename Ctx>
-Result<> makeStructNew(Ctx& ctx, Index pos, bool default_) {
+Result<>
+makeRefEq(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  return ctx.makeRefEq(pos, annotations);
+}
+
+template<typename Ctx>
+Result<>
+makeTableGet(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  auto table = maybeTableidx(ctx);
+  CHECK_ERR(table);
+  return ctx.makeTableGet(pos, annotations, table.getPtr());
+}
+
+template<typename Ctx>
+Result<>
+makeTableSet(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  auto table = maybeTableidx(ctx);
+  CHECK_ERR(table);
+  return ctx.makeTableSet(pos, annotations, table.getPtr());
+}
+
+template<typename Ctx>
+Result<>
+makeTableSize(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  auto table = maybeTableidx(ctx);
+  CHECK_ERR(table);
+  return ctx.makeTableSize(pos, annotations, table.getPtr());
+}
+
+template<typename Ctx>
+Result<>
+makeTableGrow(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  auto table = maybeTableidx(ctx);
+  CHECK_ERR(table);
+  return ctx.makeTableGrow(pos, annotations, table.getPtr());
+}
+
+template<typename Ctx>
+Result<>
+makeTableFill(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  auto table = maybeTableidx(ctx);
+  CHECK_ERR(table);
+  return ctx.makeTableFill(pos, annotations, table.getPtr());
+}
+
+template<typename Ctx>
+Result<>
+makeTableCopy(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  auto destTable = maybeTableidx(ctx);
+  CHECK_ERR(destTable);
+  auto srcTable = maybeTableidx(ctx);
+  CHECK_ERR(srcTable);
+  if (destTable && !srcTable) {
+    return ctx.in.err("expected table index or identifier");
+  }
+  return ctx.makeTableCopy(
+    pos, annotations, destTable.getPtr(), srcTable.getPtr());
+}
+
+template<typename Ctx>
+Result<>
+makeThrow(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  auto tag = tagidx(ctx);
+  CHECK_ERR(tag);
+  return ctx.makeThrow(pos, annotations, *tag);
+}
+
+template<typename Ctx>
+Result<>
+makeRethrow(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  auto label = labelidx(ctx);
+  CHECK_ERR(label);
+  return ctx.makeRethrow(pos, annotations, *label);
+}
+
+template<typename Ctx>
+Result<>
+makeThrowRef(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  return ctx.makeThrowRef(pos, annotations);
+}
+
+template<typename Ctx>
+Result<>
+makeTupleMake(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  auto arity = tupleArity(ctx);
+  CHECK_ERR(arity);
+  return ctx.makeTupleMake(pos, annotations, *arity);
+}
+
+template<typename Ctx>
+Result<> makeTupleExtract(Ctx& ctx,
+                          Index pos,
+                          const std::vector<Annotation>& annotations) {
+  auto arity = tupleArity(ctx);
+  CHECK_ERR(arity);
+  auto index = ctx.in.takeU32();
+  if (!index) {
+    return ctx.in.err("expected tuple index");
+  }
+  return ctx.makeTupleExtract(pos, annotations, *arity, *index);
+}
+
+template<typename Ctx>
+Result<>
+makeTupleDrop(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  auto arity = tupleArity(ctx);
+  CHECK_ERR(arity);
+  return ctx.makeTupleDrop(pos, annotations, *arity);
+}
+
+template<typename Ctx>
+Result<> makeCallRef(Ctx& ctx,
+                     Index pos,
+                     const std::vector<Annotation>& annotations,
+                     bool isReturn) {
+  auto type = typeidx(ctx);
+  CHECK_ERR(type);
+  return ctx.makeCallRef(pos, annotations, *type, isReturn);
+}
+
+template<typename Ctx>
+Result<>
+makeRefI31(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  return ctx.makeRefI31(pos, annotations);
+}
+
+template<typename Ctx>
+Result<> makeI31Get(Ctx& ctx,
+                    Index pos,
+                    const std::vector<Annotation>& annotations,
+                    bool signed_) {
+  return ctx.makeI31Get(pos, annotations, signed_);
+}
+
+template<typename Ctx>
+Result<>
+makeRefTest(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  auto type = reftype(ctx);
+  CHECK_ERR(type);
+  return ctx.makeRefTest(pos, annotations, *type);
+}
+
+template<typename Ctx>
+Result<>
+makeRefCast(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  auto type = reftype(ctx);
+  CHECK_ERR(type);
+  return ctx.makeRefCast(pos, annotations, *type);
+}
+
+template<typename Ctx>
+Result<> makeBrOnNull(Ctx& ctx,
+                      Index pos,
+                      const std::vector<Annotation>& annotations,
+                      bool onFail) {
+  auto label = labelidx(ctx);
+  CHECK_ERR(label);
+  return ctx.makeBrOn(
+    pos, annotations, *label, onFail ? BrOnNonNull : BrOnNull);
+}
+
+template<typename Ctx>
+Result<> makeBrOnCast(Ctx& ctx,
+                      Index pos,
+                      const std::vector<Annotation>& annotations,
+                      bool onFail) {
+  auto label = labelidx(ctx);
+  CHECK_ERR(label);
+  auto in = reftype(ctx);
+  CHECK_ERR(in);
+  auto out = reftype(ctx);
+  CHECK_ERR(out);
+  return ctx.makeBrOn(
+    pos, annotations, *label, onFail ? BrOnCastFail : BrOnCast, *in, *out);
+}
+
+template<typename Ctx>
+Result<> makeStructNew(Ctx& ctx,
+                       Index pos,
+                       const std::vector<Annotation>& annotations,
+                       bool default_) {
   auto type = typeidx(ctx);
   CHECK_ERR(type);
   if (default_) {
-    return ctx.makeStructNewDefault(pos, *type);
+    return ctx.makeStructNewDefault(pos, annotations, *type);
   }
-  return ctx.makeStructNew(pos, *type);
+  return ctx.makeStructNew(pos, annotations, *type);
 }
 
 template<typename Ctx>
-Result<> makeStructGet(Ctx& ctx, Index pos, bool signed_) {
+Result<> makeStructGet(Ctx& ctx,
+                       Index pos,
+                       const std::vector<Annotation>& annotations,
+                       bool signed_) {
   auto type = typeidx(ctx);
   CHECK_ERR(type);
   auto field = fieldidx(ctx, *type);
   CHECK_ERR(field);
-  return ctx.makeStructGet(pos, *type, *field, signed_);
+  return ctx.makeStructGet(pos, annotations, *type, *field, signed_);
 }
 
-template<typename Ctx> Result<> makeStructSet(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<>
+makeStructSet(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
   auto type = typeidx(ctx);
   CHECK_ERR(type);
   auto field = fieldidx(ctx, *type);
   CHECK_ERR(field);
-  return ctx.makeStructSet(pos, *type, *field);
+  return ctx.makeStructSet(pos, annotations, *type, *field);
 }
 
 template<typename Ctx>
-Result<> makeArrayNew(Ctx& ctx, Index pos, bool default_) {
+Result<> makeArrayNew(Ctx& ctx,
+                      Index pos,
+                      const std::vector<Annotation>& annotations,
+                      bool default_) {
   auto type = typeidx(ctx);
   CHECK_ERR(type);
   if (default_) {
-    return ctx.makeArrayNewDefault(pos, *type);
+    return ctx.makeArrayNewDefault(pos, annotations, *type);
   }
-  return ctx.makeArrayNew(pos, *type);
-}
-
-template<typename Ctx> Result<> makeArrayNewData(Ctx& ctx, Index pos) {
-  auto type = typeidx(ctx);
-  CHECK_ERR(type);
-  auto data = dataidx(ctx);
-  CHECK_ERR(data);
-  return ctx.makeArrayNewData(pos, *type, *data);
-}
-
-template<typename Ctx> Result<> makeArrayNewElem(Ctx& ctx, Index pos) {
-  auto type = typeidx(ctx);
-  CHECK_ERR(type);
-  auto data = dataidx(ctx);
-  CHECK_ERR(data);
-  return ctx.makeArrayNewElem(pos, *type, *data);
-}
-
-template<typename Ctx> Result<> makeArrayNewFixed(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
+  return ctx.makeArrayNew(pos, annotations, *type);
 }
 
 template<typename Ctx>
-Result<> makeArrayGet(Ctx& ctx, Index pos, bool signed_) {
+Result<> makeArrayNewData(Ctx& ctx,
+                          Index pos,
+                          const std::vector<Annotation>& annotations) {
   auto type = typeidx(ctx);
   CHECK_ERR(type);
-  return ctx.makeArrayGet(pos, *type, signed_);
+  auto data = dataidx(ctx);
+  CHECK_ERR(data);
+  return ctx.makeArrayNewData(pos, annotations, *type, *data);
 }
 
-template<typename Ctx> Result<> makeArraySet(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<> makeArrayNewElem(Ctx& ctx,
+                          Index pos,
+                          const std::vector<Annotation>& annotations) {
   auto type = typeidx(ctx);
   CHECK_ERR(type);
-  return ctx.makeArraySet(pos, *type);
+  auto elem = elemidx(ctx);
+  CHECK_ERR(elem);
+  return ctx.makeArrayNewElem(pos, annotations, *type, *elem);
 }
 
-template<typename Ctx> Result<> makeArrayLen(Ctx& ctx, Index pos) {
-  return ctx.makeArrayLen(pos);
+template<typename Ctx>
+Result<> makeArrayNewFixed(Ctx& ctx,
+                           Index pos,
+                           const std::vector<Annotation>& annotations) {
+  auto type = typeidx(ctx);
+  CHECK_ERR(type);
+  auto arity = ctx.in.takeU32();
+  if (!arity) {
+    return ctx.in.err(pos, "expected array.new_fixed arity");
+  }
+  return ctx.makeArrayNewFixed(pos, annotations, *type, *arity);
 }
 
-template<typename Ctx> Result<> makeArrayCopy(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<> makeArrayGet(Ctx& ctx,
+                      Index pos,
+                      const std::vector<Annotation>& annotations,
+                      bool signed_) {
+  auto type = typeidx(ctx);
+  CHECK_ERR(type);
+  return ctx.makeArrayGet(pos, annotations, *type, signed_);
+}
+
+template<typename Ctx>
+Result<>
+makeArraySet(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  auto type = typeidx(ctx);
+  CHECK_ERR(type);
+  return ctx.makeArraySet(pos, annotations, *type);
+}
+
+template<typename Ctx>
+Result<>
+makeArrayLen(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  return ctx.makeArrayLen(pos, annotations);
+}
+
+template<typename Ctx>
+Result<>
+makeArrayCopy(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
   auto destType = typeidx(ctx);
   CHECK_ERR(destType);
   auto srcType = typeidx(ctx);
   CHECK_ERR(srcType);
-  return ctx.makeArrayCopy(pos, *destType, *srcType);
+  return ctx.makeArrayCopy(pos, annotations, *destType, *srcType);
 }
 
-template<typename Ctx> Result<> makeArrayFill(Ctx& ctx, Index pos) {
+template<typename Ctx>
+Result<>
+makeArrayFill(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
   auto type = typeidx(ctx);
   CHECK_ERR(type);
-  return ctx.makeArrayFill(pos, *type);
-}
-
-template<typename Ctx> Result<> makeArrayInitData(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeArrayInitElem(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeRefAs(Ctx& ctx, Index pos, RefAsOp op) {
-  return ctx.in.err("unimplemented instruction");
+  return ctx.makeArrayFill(pos, annotations, *type);
 }
 
 template<typename Ctx>
-Result<> makeStringNew(Ctx& ctx, Index pos, StringNewOp op, bool try_) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeStringConst(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx>
-Result<> makeStringMeasure(Ctx& ctx, Index pos, StringMeasureOp op) {
-  return ctx.in.err("unimplemented instruction");
+Result<> makeArrayInitData(Ctx& ctx,
+                           Index pos,
+                           const std::vector<Annotation>& annotations) {
+  auto type = typeidx(ctx);
+  CHECK_ERR(type);
+  auto data = dataidx(ctx);
+  CHECK_ERR(data);
+  return ctx.makeArrayInitData(pos, annotations, *type, *data);
 }
 
 template<typename Ctx>
-Result<> makeStringEncode(Ctx& ctx, Index pos, StringEncodeOp op) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeStringConcat(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx>
-Result<> makeStringEq(Ctx& ctx, Index pos, StringEqOp op) {
-  return ctx.in.err("unimplemented instruction");
+Result<> makeArrayInitElem(Ctx& ctx,
+                           Index pos,
+                           const std::vector<Annotation>& annotations) {
+  auto type = typeidx(ctx);
+  CHECK_ERR(type);
+  auto elem = elemidx(ctx);
+  return ctx.makeArrayInitElem(pos, annotations, *type, *elem);
 }
 
 template<typename Ctx>
-Result<> makeStringAs(Ctx& ctx, Index pos, StringAsOp op) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeStringWTF8Advance(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeStringWTF16Get(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
-}
-
-template<typename Ctx> Result<> makeStringIterNext(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
+Result<> makeRefAs(Ctx& ctx,
+                   Index pos,
+                   const std::vector<Annotation>& annotations,
+                   RefAsOp op) {
+  return ctx.makeRefAs(pos, annotations, op);
 }
 
 template<typename Ctx>
-Result<> makeStringIterMove(Ctx& ctx, Index pos, StringIterMoveOp op) {
-  return ctx.in.err("unimplemented instruction");
+Result<> makeStringNew(Ctx& ctx,
+                       Index pos,
+                       const std::vector<Annotation>& annotations,
+                       StringNewOp op,
+                       bool try_) {
+  auto mem = maybeMemidx(ctx);
+  CHECK_ERR(mem);
+  return ctx.makeStringNew(pos, annotations, op, try_, mem.getPtr());
 }
 
 template<typename Ctx>
-Result<> makeStringSliceWTF(Ctx& ctx, Index pos, StringSliceWTFOp op) {
-  return ctx.in.err("unimplemented instruction");
+Result<> makeStringConst(Ctx& ctx,
+                         Index pos,
+                         const std::vector<Annotation>& annotations) {
+  auto str = ctx.in.takeString();
+  if (!str) {
+    return ctx.in.err("expected string");
+  }
+  return ctx.makeStringConst(pos, annotations, *str);
 }
 
-template<typename Ctx> Result<> makeStringSliceIter(Ctx& ctx, Index pos) {
-  return ctx.in.err("unimplemented instruction");
+template<typename Ctx>
+Result<> makeStringMeasure(Ctx& ctx,
+                           Index pos,
+                           const std::vector<Annotation>& annotations,
+                           StringMeasureOp op) {
+  return ctx.makeStringMeasure(pos, annotations, op);
+}
+
+template<typename Ctx>
+Result<> makeStringEncode(Ctx& ctx,
+                          Index pos,
+                          const std::vector<Annotation>& annotations,
+                          StringEncodeOp op) {
+  auto mem = maybeMemidx(ctx);
+  CHECK_ERR(mem);
+  return ctx.makeStringEncode(pos, annotations, op, mem.getPtr());
+}
+
+template<typename Ctx>
+Result<> makeStringConcat(Ctx& ctx,
+                          Index pos,
+                          const std::vector<Annotation>& annotations) {
+  return ctx.makeStringConcat(pos, annotations);
+}
+
+template<typename Ctx>
+Result<> makeStringEq(Ctx& ctx,
+                      Index pos,
+                      const std::vector<Annotation>& annotations,
+                      StringEqOp op) {
+  return ctx.makeStringEq(pos, annotations, op);
+}
+
+template<typename Ctx>
+Result<> makeStringAs(Ctx& ctx,
+                      Index pos,
+                      const std::vector<Annotation>& annotations,
+                      StringAsOp op) {
+  return ctx.makeStringAs(pos, annotations, op);
+}
+
+template<typename Ctx>
+Result<> makeStringWTF8Advance(Ctx& ctx,
+                               Index pos,
+                               const std::vector<Annotation>& annotations) {
+  return ctx.makeStringWTF8Advance(pos, annotations);
+}
+
+template<typename Ctx>
+Result<> makeStringWTF16Get(Ctx& ctx,
+                            Index pos,
+                            const std::vector<Annotation>& annotations) {
+  return ctx.makeStringWTF16Get(pos, annotations);
+}
+
+template<typename Ctx>
+Result<> makeStringIterNext(Ctx& ctx,
+                            Index pos,
+                            const std::vector<Annotation>& annotations) {
+  return ctx.makeStringIterNext(pos, annotations);
+}
+
+template<typename Ctx>
+Result<> makeStringIterMove(Ctx& ctx,
+                            Index pos,
+                            const std::vector<Annotation>& annotations,
+                            StringIterMoveOp op) {
+  return ctx.makeStringIterMove(pos, annotations, op);
+}
+
+template<typename Ctx>
+Result<> makeStringSliceWTF(Ctx& ctx,
+                            Index pos,
+                            const std::vector<Annotation>& annotations,
+                            StringSliceWTFOp op) {
+  return ctx.makeStringSliceWTF(pos, annotations, op);
+}
+
+template<typename Ctx>
+Result<> makeStringSliceIter(Ctx& ctx,
+                             Index pos,
+                             const std::vector<Annotation>& annotations) {
+  return ctx.makeStringSliceIter(pos, annotations);
+}
+
+template<typename Ctx>
+Result<>
+makeContNew(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  auto type = typeidx(ctx);
+  CHECK_ERR(type);
+
+  return ctx.makeContNew(pos, annotations, *type);
+}
+
+// resume ::= 'resume' typeidx ('(' 'tag' tagidx labelidx ')')*
+template<typename Ctx>
+Result<>
+makeResume(Ctx& ctx, Index pos, const std::vector<Annotation>& annotations) {
+  auto type = typeidx(ctx);
+  CHECK_ERR(type);
+
+  auto tagLabels = ctx.makeTagLabelList();
+  while (ctx.in.takeSExprStart("tag"sv)) {
+    auto tag = tagidx(ctx);
+    CHECK_ERR(tag);
+    auto label = labelidx(ctx);
+    CHECK_ERR(label);
+    ctx.appendTagLabel(tagLabels, *tag, *label);
+    if (!ctx.in.takeRParen()) {
+      return ctx.in.err("expected ')' at end of handler clause");
+    }
+  }
+
+  return ctx.makeResume(pos, annotations, *type, tagLabels);
 }
 
 // =======
@@ -1504,8 +2489,8 @@ template<typename Ctx> Result<typename Ctx::HeapTypeT> typeidx(Ctx& ctx) {
   return ctx.in.err("expected type index or identifier");
 }
 
-// fieldidx_t ::= x:u32 => x
-//              | v:id  => x (if t.fields[x] = v)
+// fieldidx ::= x:u32 => x
+//            | v:id  => x (if t.fields[x] = v)
 template<typename Ctx>
 Result<typename Ctx::FieldIdxT> fieldidx(Ctx& ctx,
                                          typename Ctx::HeapTypeT type) {
@@ -1516,6 +2501,62 @@ Result<typename Ctx::FieldIdxT> fieldidx(Ctx& ctx,
     return ctx.getFieldFromName(type, *id);
   }
   return ctx.in.err("expected field index or identifier");
+}
+
+// funcidx ::= x:u32 => x
+//           | v:id => x (if t.funcs[x] = v)
+template<typename Ctx>
+MaybeResult<typename Ctx::FuncIdxT> maybeFuncidx(Ctx& ctx) {
+  if (auto x = ctx.in.takeU32()) {
+    return ctx.getFuncFromIdx(*x);
+  }
+  if (auto id = ctx.in.takeID()) {
+    return ctx.getFuncFromName(*id);
+  }
+  return {};
+}
+
+template<typename Ctx> Result<typename Ctx::FuncIdxT> funcidx(Ctx& ctx) {
+  if (auto idx = maybeFuncidx(ctx)) {
+    CHECK_ERR(idx);
+    return *idx;
+  }
+  return ctx.in.err("expected function index or identifier");
+}
+
+// tableidx ::= x:u23 => x
+//            | v:id => x (if tables[x] = v)
+template<typename Ctx>
+MaybeResult<typename Ctx::TableIdxT> maybeTableidx(Ctx& ctx) {
+  if (auto x = ctx.in.takeU32()) {
+    return ctx.getTableFromIdx(*x);
+  }
+  if (auto id = ctx.in.takeID()) {
+    return ctx.getTableFromName(*id);
+  }
+  return {};
+}
+
+template<typename Ctx> Result<typename Ctx::TableIdxT> tableidx(Ctx& ctx) {
+  if (auto idx = maybeTableidx(ctx)) {
+    CHECK_ERR(idx);
+    return *idx;
+  }
+  return ctx.in.err("expected table index or identifier");
+}
+
+// tableuse ::= '(' 'table' x:tableidx ')'
+template<typename Ctx>
+MaybeResult<typename Ctx::TableIdxT> maybeTableuse(Ctx& ctx) {
+  if (!ctx.in.takeSExprStart("table"sv)) {
+    return {};
+  }
+  auto idx = tableidx(ctx);
+  CHECK_ERR(idx);
+  if (!ctx.in.takeRParen()) {
+    return ctx.in.err("Expected end of memory use");
+  }
+  return *idx;
 }
 
 // memidx ::= x:u32 => x
@@ -1565,8 +2606,20 @@ template<typename Ctx> Result<typename Ctx::GlobalIdxT> globalidx(Ctx& ctx) {
   return ctx.in.err("expected global index or identifier");
 }
 
+// elemidx ::= x:u32 => x
+//           | v:id => x (if elems[x] = v)
+template<typename Ctx> Result<typename Ctx::ElemIdxT> elemidx(Ctx& ctx) {
+  if (auto x = ctx.in.takeU32()) {
+    return ctx.getElemFromIdx(*x);
+  }
+  if (auto id = ctx.in.takeID()) {
+    return ctx.getElemFromName(*id);
+  }
+  return ctx.in.err("expected elem index or identifier");
+}
+
 // dataidx ::= x:u32 => x
-//           | v:id => x (if data[x] = v)
+//           | v:id => x (if datas[x] = v)
 template<typename Ctx> Result<typename Ctx::DataIdxT> dataidx(Ctx& ctx) {
   if (auto x = ctx.in.takeU32()) {
     return ctx.getDataFromIdx(*x);
@@ -1591,14 +2644,27 @@ template<typename Ctx> Result<typename Ctx::LocalIdxT> localidx(Ctx& ctx) {
 
 // labelidx ::= x:u32 => x
 //            | v:id => x (if labels[x] = v)
-template<typename Ctx> Result<typename Ctx::LabelIdxT> labelidx(Ctx& ctx) {
+template<typename Ctx>
+Result<typename Ctx::LabelIdxT> labelidx(Ctx& ctx, bool inDelegate) {
   if (auto x = ctx.in.takeU32()) {
-    return ctx.getLabelFromIdx(*x);
+    return ctx.getLabelFromIdx(*x, inDelegate);
   }
   if (auto id = ctx.in.takeID()) {
-    return ctx.getLabelFromName(*id);
+    return ctx.getLabelFromName(*id, inDelegate);
   }
   return ctx.in.err("expected label index or identifier");
+}
+
+// tagidx ::= x:u32 => x
+//          | v:id => x (if tags[x] = v)
+template<typename Ctx> Result<typename Ctx::TagIdxT> tagidx(Ctx& ctx) {
+  if (auto x = ctx.in.takeU32()) {
+    return ctx.getTagFromIdx(*x);
+  }
+  if (auto id = ctx.in.takeID()) {
+    return ctx.getTagFromName(*id);
+  }
+  return ctx.in.err("expected tag index or identifier");
 }
 
 // typeuse ::= '(' 'type' x:typeidx ')'                                => x, []
@@ -1631,7 +2697,7 @@ template<typename Ctx> Result<typename Ctx::TypeUseT> typeuse(Ctx& ctx) {
 }
 
 // ('(' 'import' mod:name nm:name ')')?
-MaybeResult<ImportNames> inlineImport(ParseInput& in) {
+MaybeResult<ImportNames> inlineImport(Lexer& in) {
   if (!in.takeSExprStart("import"sv)) {
     return {};
   }
@@ -1651,7 +2717,7 @@ MaybeResult<ImportNames> inlineImport(ParseInput& in) {
 }
 
 // ('(' 'export' name ')')*
-Result<std::vector<Name>> inlineExports(ParseInput& in) {
+Result<std::vector<Name>> inlineExports(Lexer& in) {
   std::vector<Name> exports;
   while (in.takeSExprStart("export"sv)) {
     auto name = in.takeName();
@@ -1709,7 +2775,7 @@ template<typename Ctx> MaybeResult<> subtype(Ctx& ctx) {
   }
 
   if (ctx.in.takeSExprStart("sub"sv)) {
-    if (ctx.in.takeKeyword("open"sv)) {
+    if (!ctx.in.takeKeyword("final"sv)) {
       ctx.setOpen();
     }
     if (auto super = maybeTypeidx(ctx)) {
@@ -1791,6 +2857,71 @@ template<typename Ctx> MaybeResult<typename Ctx::LocalsT> locals(Ctx& ctx) {
   return {};
 }
 
+// import ::= '(' 'import' mod:name nm:name importdesc ')'
+// importdesc ::= '(' 'func' id? typeuse ')'
+//              | '(' 'table' id? tabletype ')'
+//              | '(' 'memory' id? memtype ')'
+//              | '(' 'global' id? globaltype ')'
+//              | '(' 'tag' id? typeuse ')'
+template<typename Ctx> MaybeResult<> import_(Ctx& ctx) {
+  auto pos = ctx.in.getPos();
+
+  if (!ctx.in.takeSExprStart("import"sv)) {
+    return {};
+  }
+
+  auto mod = ctx.in.takeName();
+  if (!mod) {
+    return ctx.in.err("expected import module name");
+  }
+
+  auto nm = ctx.in.takeName();
+  if (!nm) {
+    return ctx.in.err("expected import name");
+  }
+  ImportNames names{*mod, *nm};
+
+  if (ctx.in.takeSExprStart("func"sv)) {
+    auto name = ctx.in.takeID();
+    auto type = typeuse(ctx);
+    CHECK_ERR(type);
+    CHECK_ERR(
+      ctx.addFunc(name ? *name : Name{}, {}, &names, *type, std::nullopt, pos));
+  } else if (ctx.in.takeSExprStart("table"sv)) {
+    auto name = ctx.in.takeID();
+    auto type = tabletype(ctx);
+    CHECK_ERR(type);
+    CHECK_ERR(ctx.addTable(name ? *name : Name{}, {}, &names, *type, pos));
+  } else if (ctx.in.takeSExprStart("memory"sv)) {
+    auto name = ctx.in.takeID();
+    auto type = memtype(ctx);
+    CHECK_ERR(type);
+    CHECK_ERR(ctx.addMemory(name ? *name : Name{}, {}, &names, *type, pos));
+  } else if (ctx.in.takeSExprStart("global"sv)) {
+    auto name = ctx.in.takeID();
+    auto type = globaltype(ctx);
+    CHECK_ERR(type);
+    CHECK_ERR(ctx.addGlobal(
+      name ? *name : Name{}, {}, &names, *type, std::nullopt, pos));
+  } else if (ctx.in.takeSExprStart("tag"sv)) {
+    auto name = ctx.in.takeID();
+    auto type = typeuse(ctx);
+    CHECK_ERR(type);
+    CHECK_ERR(ctx.addTag(name ? *name : Name{}, {}, &names, *type, pos));
+  } else {
+    return ctx.in.err("expected import description");
+  }
+
+  if (!ctx.in.takeRParen()) {
+    return ctx.in.err("expected end of import description");
+  }
+  if (!ctx.in.takeRParen()) {
+    return ctx.in.err("expected end of import");
+  }
+
+  return Ok{};
+}
+
 // func ::= '(' 'func' id? ('(' 'export' name ')')*
 //              x,I:typeuse t*:vec(local) (in:instr)* ')'
 //        | '(' 'func' id? ('(' 'export' name ')')*
@@ -1830,6 +2961,82 @@ template<typename Ctx> MaybeResult<> func(Ctx& ctx) {
 
   CHECK_ERR(
     ctx.addFunc(name, *exports, import.getPtr(), *type, localVars, pos));
+  return Ok{};
+}
+
+// table ::= '(' 'table' id? ('(' 'export' name ')')*
+//               '(' 'import' mod:name nm:name ')'? tabletype ')'
+//         | '(' 'table' id? ('(' 'export' name ')')*
+//               reftype '(' 'elem' (elemexpr* | funcidx*) ')' ')'
+template<typename Ctx> MaybeResult<> table(Ctx& ctx) {
+  auto pos = ctx.in.getPos();
+  if (!ctx.in.takeSExprStart("table"sv)) {
+    return {};
+  }
+
+  Name name;
+  if (auto id = ctx.in.takeID()) {
+    name = *id;
+  }
+
+  auto exports = inlineExports(ctx.in);
+  CHECK_ERR(exports);
+
+  auto import = inlineImport(ctx.in);
+  CHECK_ERR(import);
+
+  // Reftype if we have inline elements.
+  auto type = reftype(ctx);
+  CHECK_ERR(type);
+
+  std::optional<typename Ctx::TableTypeT> ttype;
+  std::optional<typename Ctx::ElemListT> elems;
+  if (type) {
+    // We should have inline elements.
+    if (!ctx.in.takeSExprStart("elem"sv)) {
+      return ctx.in.err("expected table limits or inline elements");
+    }
+    if (import) {
+      return ctx.in.err("imported tables cannot have inline elements");
+    }
+
+    auto list = ctx.makeElemList(*type);
+    bool foundElem = false;
+    while (auto elem = maybeElemexpr(ctx)) {
+      CHECK_ERR(elem);
+      ctx.appendElem(list, *elem);
+      foundElem = true;
+    }
+
+    // If there were no elemexprs, then maybe we have funcidxs instead.
+    if (!foundElem) {
+      while (auto func = maybeFuncidx(ctx)) {
+        CHECK_ERR(func);
+        ctx.appendFuncElem(list, *func);
+      }
+    }
+
+    if (!ctx.in.takeRParen()) {
+      return ctx.in.err("expected end of inline elems");
+    }
+    ttype = ctx.makeTableType(ctx.getLimitsFromElems(list), *type);
+    elems = std::move(list);
+  } else {
+    auto tabtype = tabletype(ctx);
+    CHECK_ERR(tabtype);
+    ttype = *tabtype;
+  }
+
+  if (!ctx.in.takeRParen()) {
+    return ctx.in.err("expected end of table declaration");
+  }
+
+  CHECK_ERR(ctx.addTable(name, *exports, import.getPtr(), *ttype, pos));
+
+  if (elems) {
+    CHECK_ERR(ctx.addImplicitElems(*type, std::move(*elems)));
+  }
+
   return Ok{};
 }
 
@@ -1924,6 +3131,187 @@ template<typename Ctx> MaybeResult<> global(Ctx& ctx) {
   return Ok{};
 }
 
+// export ::= '(' 'export' nm:name exportdesc ')'
+// exportdesc ::= '(' 'func' x:funcidx ')'
+//              | '(' 'table' x:tableidx ')'
+//              | '(' 'memory' x:memidx ')'
+//              | '(' 'global' x:globalidx ')'
+//              | '(' 'tag' x:tagidx ')'
+template<typename Ctx> MaybeResult<> export_(Ctx& ctx) {
+  auto pos = ctx.in.getPos();
+  if (!ctx.in.takeSExprStart("export"sv)) {
+    return {};
+  }
+
+  auto name = ctx.in.takeName();
+  if (!name) {
+    return ctx.in.err("expected export name");
+  }
+
+  if (ctx.in.takeSExprStart("func"sv)) {
+    auto idx = funcidx(ctx);
+    CHECK_ERR(idx);
+    CHECK_ERR(ctx.addExport(pos, *idx, *name, ExternalKind::Function));
+  } else if (ctx.in.takeSExprStart("table"sv)) {
+    auto idx = tableidx(ctx);
+    CHECK_ERR(idx);
+    CHECK_ERR(ctx.addExport(pos, *idx, *name, ExternalKind::Table));
+  } else if (ctx.in.takeSExprStart("memory"sv)) {
+    auto idx = memidx(ctx);
+    CHECK_ERR(idx);
+    CHECK_ERR(ctx.addExport(pos, *idx, *name, ExternalKind::Memory));
+  } else if (ctx.in.takeSExprStart("global"sv)) {
+    auto idx = globalidx(ctx);
+    CHECK_ERR(idx);
+    CHECK_ERR(ctx.addExport(pos, *idx, *name, ExternalKind::Global));
+  } else if (ctx.in.takeSExprStart("tag"sv)) {
+    auto idx = tagidx(ctx);
+    CHECK_ERR(idx);
+    CHECK_ERR(ctx.addExport(pos, *idx, *name, ExternalKind::Tag));
+  } else {
+    return ctx.in.err("expected export description");
+  }
+
+  if (!ctx.in.takeRParen()) {
+    return ctx.in.err("expected end of export description");
+  }
+  if (!ctx.in.takeRParen()) {
+    return ctx.in.err("expected end of export");
+  }
+  return Ok{};
+}
+
+// start ::= '(' 'start' funcidx ')'
+template<typename Ctx> MaybeResult<> start(Ctx& ctx) {
+  auto pos = ctx.in.getPos();
+  if (!ctx.in.takeSExprStart("start"sv)) {
+    return {};
+  }
+  auto func = funcidx(ctx);
+  CHECK_ERR(func);
+
+  CHECK_ERR(ctx.addStart(*func, pos));
+
+  if (!ctx.in.takeRParen()) {
+    return ctx.in.err("expected end of start declaration");
+  }
+  return Ok{};
+}
+
+// elemexpr ::= '(' 'item' expr ')' | '(' instr ')'
+template<typename Ctx>
+MaybeResult<typename Ctx::ExprT> maybeElemexpr(Ctx& ctx) {
+  MaybeResult<typename Ctx::ExprT> result;
+  if (ctx.in.takeSExprStart("item"sv)) {
+    result = expr(ctx);
+  } else if (ctx.in.takeLParen()) {
+    // TODO: `instr` should included both folded and unfolded instrs.
+    if (auto inst = instr(ctx)) {
+      CHECK_ERR(inst);
+    } else {
+      return ctx.in.err("expected instruction");
+    }
+    result = ctx.makeExpr();
+  } else {
+    return {};
+  }
+  CHECK_ERR(result);
+  if (!ctx.in.takeRParen()) {
+    return ctx.in.err("expected end of element expression");
+  }
+  return result;
+}
+
+// elemlist ::= reftype elemexpr* | 'func' funcidx*
+//            | funcidx* (iff the tableuse is omitted)
+template<typename Ctx>
+Result<typename Ctx::ElemListT> elemlist(Ctx& ctx, bool legacy) {
+  if (auto type = reftype(ctx)) {
+    auto res = ctx.makeElemList(*type);
+    while (auto elem = maybeElemexpr(ctx)) {
+      CHECK_ERR(elem);
+      ctx.appendElem(res, *elem);
+    }
+    return res;
+  } else if (ctx.in.takeKeyword("func"sv) || legacy) {
+    auto res = ctx.makeFuncElemList();
+    while (auto func = maybeFuncidx(ctx)) {
+      CHECK_ERR(func);
+      ctx.appendFuncElem(res, *func);
+    }
+    return res;
+  }
+  return ctx.in.err("expected element list");
+}
+
+// elem ::= '(' 'elem' id? x:tableuse? ('(' ('offset' e:expr | e:instr) ')')?
+//               elemlist ')'
+//        | '(' 'elem' id? 'declare' elemlist ')'
+template<typename Ctx> MaybeResult<> elem(Ctx& ctx) {
+  auto pos = ctx.in.getPos();
+  if (!ctx.in.takeSExprStart("elem"sv)) {
+    return {};
+  }
+
+  Name name;
+  if (auto id = ctx.in.takeID()) {
+    name = *id;
+  }
+
+  bool isDeclare = false;
+  MaybeResult<typename Ctx::TableIdxT> table;
+  std::optional<typename Ctx::ExprT> offset;
+
+  if (ctx.in.takeKeyword("declare"sv)) {
+    isDeclare = true;
+  } else {
+    table = maybeTableuse(ctx);
+    CHECK_ERR(table);
+
+    if (ctx.in.takeSExprStart("offset")) {
+      auto off = expr(ctx);
+      CHECK_ERR(off);
+      offset = *off;
+    } else {
+      // This may be an abbreviated offset instruction or it may be the
+      // beginning of the elemlist.
+      auto beforeLParen = ctx.in.getPos();
+      if (ctx.in.takeLParen()) {
+        if (auto inst = instr(ctx)) {
+          CHECK_ERR(inst);
+          auto off = ctx.makeExpr();
+          CHECK_ERR(off);
+          offset = *off;
+        } else {
+          // This must be the beginning of the elemlist instead.
+          ctx.in.setIndex(beforeLParen);
+        }
+      }
+    }
+    if (offset && !ctx.in.takeRParen()) {
+      return ctx.in.err("expected end of offset expression");
+    }
+  }
+
+  // If there is no explicit tableuse, we can use the legacy elemlist format.
+  bool legacy = !table;
+  auto elems = elemlist(ctx, legacy);
+  CHECK_ERR(elems);
+
+  if (!ctx.in.takeRParen()) {
+    return ctx.in.err("expected end of element segment");
+  }
+
+  if (isDeclare) {
+    CHECK_ERR(ctx.addDeclareElem(name, std::move(*elems), pos));
+  } else {
+    CHECK_ERR(
+      ctx.addElem(name, table.getPtr(), offset, std::move(*elems), pos));
+  }
+
+  return Ok{};
+}
+
 // datastring ::= (b:string)* => concat(b*)
 template<typename Ctx> Result<typename Ctx::DataStringT> datastring(Ctx& ctx) {
   auto data = ctx.makeDataString();
@@ -1985,6 +3373,36 @@ template<typename Ctx> MaybeResult<> data(Ctx& ctx) {
   return Ok{};
 }
 
+// tag ::= '(' 'tag' id? ('(' 'export' name ')')*
+//            ('(' 'import' mod:name nm:name ')')? typeuse ')'
+template<typename Ctx> MaybeResult<> tag(Ctx& ctx) {
+  auto pos = ctx.in.getPos();
+  if (!ctx.in.takeSExprStart("tag"sv)) {
+    return {};
+  }
+
+  Name name;
+  if (auto id = ctx.in.takeID()) {
+    name = *id;
+  }
+
+  auto exports = inlineExports(ctx.in);
+  CHECK_ERR(exports);
+
+  auto import = inlineImport(ctx.in);
+  CHECK_ERR(import);
+
+  auto type = typeuse(ctx);
+  CHECK_ERR(type);
+
+  if (!ctx.in.takeRParen()) {
+    return ctx.in.err("expected end of tag");
+  }
+
+  CHECK_ERR(ctx.addTag(name, *exports, import.getPtr(), *type, pos));
+  return Ok{};
+}
+
 // modulefield ::= deftype
 //               | import
 //               | func
@@ -1995,15 +3413,24 @@ template<typename Ctx> MaybeResult<> data(Ctx& ctx) {
 //               | start
 //               | elem
 //               | data
+//               | tag
 template<typename Ctx> MaybeResult<> modulefield(Ctx& ctx) {
-  if (auto t = ctx.in.peek(); !t || t->isRParen()) {
+  if (ctx.in.empty() || ctx.in.peekRParen()) {
     return {};
   }
   if (auto res = deftype(ctx)) {
     CHECK_ERR(res);
     return Ok{};
   }
+  if (auto res = import_(ctx)) {
+    CHECK_ERR(res);
+    return Ok{};
+  }
   if (auto res = func(ctx)) {
+    CHECK_ERR(res);
+    return Ok{};
+  }
+  if (auto res = table(ctx)) {
     CHECK_ERR(res);
     return Ok{};
   }
@@ -2015,7 +3442,23 @@ template<typename Ctx> MaybeResult<> modulefield(Ctx& ctx) {
     CHECK_ERR(res);
     return Ok{};
   }
+  if (auto res = export_(ctx)) {
+    CHECK_ERR(res);
+    return Ok{};
+  }
+  if (auto res = start(ctx)) {
+    CHECK_ERR(res);
+    return Ok{};
+  }
+  if (auto res = elem(ctx)) {
+    CHECK_ERR(res);
+    return Ok{};
+  }
   if (auto res = data(ctx)) {
+    CHECK_ERR(res);
+    return Ok{};
+  }
+  if (auto res = tag(ctx)) {
     CHECK_ERR(res);
     return Ok{};
   }

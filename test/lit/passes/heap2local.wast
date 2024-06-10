@@ -646,8 +646,10 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (if
   ;; CHECK-NEXT:   (local.get $x)
-  ;; CHECK-NEXT:   (drop
-  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:   (then
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (ref.null none)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (block (result f64)
@@ -666,8 +668,10 @@
     ;; that as a result of this the final local.get has two sets that send it
     ;; values, but we know they are both the same allocation.
     (if (local.get $x)
-      (local.set $ref
-        (local.get $ref)
+      (then
+        (local.set $ref
+          (local.get $ref)
+        )
       )
     )
     (struct.get $struct.A 1
@@ -726,8 +730,10 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (if
   ;; CHECK-NEXT:   (local.get $x)
-  ;; CHECK-NEXT:   (local.set $ref
-  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:   (then
+  ;; CHECK-NEXT:    (local.set $ref
+  ;; CHECK-NEXT:     (ref.null none)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (struct.get $struct.A 1
@@ -740,8 +746,10 @@
       (struct.new_default $struct.A)
     )
     (if (local.get $x)
-      (local.set $ref
-        (ref.null $struct.A)
+      (then
+        (local.set $ref
+          (ref.null $struct.A)
+        )
       )
     )
     ;; A get that receives two different allocations, and so we should not try
@@ -985,15 +993,17 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:   (if
   ;; CHECK-NEXT:    (local.get $x)
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (block (result f64)
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (ref.null none)
+  ;; CHECK-NEXT:    (then
+  ;; CHECK-NEXT:     (drop
+  ;; CHECK-NEXT:      (block (result f64)
+  ;; CHECK-NEXT:       (drop
+  ;; CHECK-NEXT:        (ref.null none)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (local.get $3)
   ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (local.get $3)
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (block
+  ;; CHECK-NEXT:    (else
   ;; CHECK-NEXT:     (drop
   ;; CHECK-NEXT:      (ref.null none)
   ;; CHECK-NEXT:     )
@@ -1025,20 +1035,24 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:   (if
   ;; CHECK-NEXT:    (local.get $x)
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (block (result i32)
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (ref.null none)
+  ;; CHECK-NEXT:    (then
+  ;; CHECK-NEXT:     (drop
+  ;; CHECK-NEXT:      (block (result i32)
+  ;; CHECK-NEXT:       (drop
+  ;; CHECK-NEXT:        (ref.null none)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (local.get $2)
   ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (local.get $2)
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (block (result f64)
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (ref.null none)
+  ;; CHECK-NEXT:    (else
+  ;; CHECK-NEXT:     (drop
+  ;; CHECK-NEXT:      (block (result f64)
+  ;; CHECK-NEXT:       (drop
+  ;; CHECK-NEXT:        (ref.null none)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:       (local.get $3)
   ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (local.get $3)
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
@@ -1062,14 +1076,18 @@
         )
       )
       (if (local.get $x)
-        (drop
-          (struct.get $struct.A 1
-            (local.get $ref)
+        (then
+          (drop
+            (struct.get $struct.A 1
+              (local.get $ref)
+            )
           )
         )
-        (struct.set $struct.A 1
-          (local.get $ref)
-          (f64.const 42)
+        (else
+          (struct.set $struct.A 1
+            (local.get $ref)
+            (f64.const 42)
+          )
         )
       )
       (loop $inner
@@ -1087,14 +1105,18 @@
         )
       )
       (if (local.get $x)
-        (drop
-          (struct.get $struct.A 0
-            (local.get $ref)
+        (then
+          (drop
+            (struct.get $struct.A 0
+              (local.get $ref)
+            )
           )
         )
-        (drop
-          (struct.get $struct.A 1
-            (local.get $ref)
+        (else
+          (drop
+            (struct.get $struct.A 1
+              (local.get $ref)
+            )
           )
         )
       )
@@ -2076,5 +2098,121 @@
         )
       )
     )
+  )
+)
+
+(module
+  ;; CHECK:      (type $struct (struct (field (mut anyref))))
+  (type $struct (struct (field (mut anyref))))
+
+  ;; CHECK:      (func $multiple-interactions (type $1)
+  ;; CHECK-NEXT:  (local $temp (ref $struct))
+  ;; CHECK-NEXT:  (local $1 anyref)
+  ;; CHECK-NEXT:  (local.set $temp
+  ;; CHECK-NEXT:   (struct.new_default $struct)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (block (result nullref)
+  ;; CHECK-NEXT:     (local.set $1
+  ;; CHECK-NEXT:      (ref.null none)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (ref.null none)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $1
+  ;; CHECK-NEXT:    (local.get $temp)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $multiple-interactions
+    (local $temp (ref $struct))
+    (local.set $temp
+      (struct.new_default $struct)
+    )
+    ;; This expression interacts with its children in two different ways: the
+    ;; reference does not escape from the function, so we can optimize it into
+    ;; locals, while the value read from the local is written to the heap, so it
+    ;; does escape. However, we can optimize it after we optimize the first
+    ;; allocation away, which would happen if we ran another pass of heap2local
+    ;; (but we do not here).
+    (struct.set $struct 0
+      (struct.new_default $struct)
+      (local.get $temp)
+    )
+  )
+
+  ;; CHECK:      (func $multiple-interactions-both-locals (type $1)
+  ;; CHECK-NEXT:  (local $temp (ref $struct))
+  ;; CHECK-NEXT:  (local $temp2 (ref $struct))
+  ;; CHECK-NEXT:  (local $2 anyref)
+  ;; CHECK-NEXT:  (local.set $temp
+  ;; CHECK-NEXT:   (struct.new_default $struct)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result nullref)
+  ;; CHECK-NEXT:    (local.set $2
+  ;; CHECK-NEXT:     (ref.null none)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (ref.null none)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $2
+  ;; CHECK-NEXT:    (local.get $temp)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $multiple-interactions-both-locals
+    (local $temp (ref $struct))
+    (local $temp2 (ref $struct))
+    (local.set $temp
+      (struct.new_default $struct)
+    )
+    ;; Now both allocations are written to locals. We can still optimize the
+    ;; second.
+    (local.set $temp2
+      (struct.new_default $struct)
+    )
+    (struct.set $struct 0
+      (local.get $temp2)
+      (local.get $temp)
+    )
+  )
+
+  ;; CHECK:      (func $multiple-interactions-escapes (type $2) (result anyref)
+  ;; CHECK-NEXT:  (local $temp (ref $struct))
+  ;; CHECK-NEXT:  (local $temp2 (ref $struct))
+  ;; CHECK-NEXT:  (local.set $temp
+  ;; CHECK-NEXT:   (struct.new_default $struct)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $temp2
+  ;; CHECK-NEXT:   (struct.new_default $struct)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (struct.set $struct 0
+  ;; CHECK-NEXT:   (local.get $temp2)
+  ;; CHECK-NEXT:   (local.get $temp)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.get $temp2)
+  ;; CHECK-NEXT: )
+  (func $multiple-interactions-escapes (result anyref)
+    (local $temp (ref $struct))
+    (local $temp2 (ref $struct))
+    (local.set $temp
+      (struct.new_default $struct)
+    )
+    (local.set $temp2
+      (struct.new_default $struct)
+    )
+    (struct.set $struct 0
+      (local.get $temp2)
+      (local.get $temp)
+    )
+    ;; As above, but now the second allocation escapes, so nothing is
+    ;; optimized.
+    (local.get $temp2)
   )
 )

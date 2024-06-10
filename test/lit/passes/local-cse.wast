@@ -31,7 +31,9 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (if
   ;; CHECK-NEXT:   (i32.const 0)
-  ;; CHECK-NEXT:   (nop)
+  ;; CHECK-NEXT:   (then
+  ;; CHECK-NEXT:    (nop)
+  ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (i32.add
@@ -77,7 +79,7 @@
     (drop
       (i32.add (i32.const 1) (i32.const 2))
     )
-    (if (i32.const 0) (nop))
+    (if (i32.const 0) (then (nop)))
     ;; This add is after an if, which means we are no longer in the same basic
     ;; block - which means we cannot optimize it with the previous identical
     ;; adds.
@@ -399,13 +401,17 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (if
   ;; CHECK-NEXT:   (i32.const 0)
-  ;; CHECK-NEXT:   (drop
-  ;; CHECK-NEXT:    (local.get $0)
+  ;; CHECK-NEXT:   (then
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (local.get $0)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
-  ;; CHECK-NEXT:   (drop
-  ;; CHECK-NEXT:    (i32.add
-  ;; CHECK-NEXT:     (i32.const 2)
-  ;; CHECK-NEXT:     (i32.const 3)
+  ;; CHECK-NEXT:   (else
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (i32.add
+  ;; CHECK-NEXT:      (i32.const 2)
+  ;; CHECK-NEXT:      (i32.const 3)
+  ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
@@ -420,17 +426,21 @@
     (if
       (i32.const 0)
       ;; This add is dominated by the above, so we can use a tee of it.
-      (drop
-        (i32.add
-          (i32.const 2)
-          (i32.const 3)
+      (then
+        (drop
+          (i32.add
+            (i32.const 2)
+            (i32.const 3)
+          )
         )
       )
       ;; We could optimize this add as well, but do not yet. TODO
-      (drop
-        (i32.add
-          (i32.const 2)
-          (i32.const 3)
+      (else
+        (drop
+          (i32.add
+            (i32.const 2)
+            (i32.const 3)
+          )
         )
       )
     )
@@ -447,20 +457,17 @@
   (global $other-glob (mut i32) (i32.const 1))
 
   ;; CHECK:      (func $global
-  ;; CHECK-NEXT:  (local $0 i32)
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (local.tee $0
-  ;; CHECK-NEXT:    (global.get $glob)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (global.get $glob)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:   (global.get $glob)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (global.set $other-glob
   ;; CHECK-NEXT:   (i32.const 100)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:   (global.get $glob)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (global.set $glob
   ;; CHECK-NEXT:   (i32.const 200)
@@ -470,7 +477,11 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   (func $global
-    ;; We should optimize redundant global.get operations.
+    ;; We should not optimize redundant global.get operations: they are of size
+    ;; 1 (no children), and so we may end up increasing code size here for
+    ;; unclear benefit. The benefit is unclear since VMs already do GVN/CSE
+    ;; themselves, and so we focus on things of size 2 and above, where we
+    ;; definitely reduce code size at least.
     (drop (global.get $glob))
     (drop (global.get $glob))
     ;; We can do it past a write to another global

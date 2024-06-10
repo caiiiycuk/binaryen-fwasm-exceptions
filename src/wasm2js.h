@@ -2255,7 +2255,15 @@ Ref Wasm2JSBuilder::processFunctionBody(Module* m,
       unimplemented(curr);
       WASM_UNREACHABLE("unimp");
     }
+    Ref visitTableCopy(TableCopy* curr) {
+      unimplemented(curr);
+      WASM_UNREACHABLE("unimp");
+    }
     Ref visitTry(Try* curr) {
+      unimplemented(curr);
+      WASM_UNREACHABLE("unimp");
+    }
+    Ref visitTryTable(TryTable* curr) {
       unimplemented(curr);
       WASM_UNREACHABLE("unimp");
     }
@@ -2264,6 +2272,10 @@ Ref Wasm2JSBuilder::processFunctionBody(Module* m,
       WASM_UNREACHABLE("unimp");
     }
     Ref visitRethrow(Rethrow* curr) {
+      unimplemented(curr);
+      WASM_UNREACHABLE("unimp");
+    }
+    Ref visitThrowRef(ThrowRef* curr) {
       unimplemented(curr);
       WASM_UNREACHABLE("unimp");
     }
@@ -2412,6 +2424,15 @@ Ref Wasm2JSBuilder::processFunctionBody(Module* m,
       WASM_UNREACHABLE("unimp");
     }
     Ref visitRefAs(RefAs* curr) {
+      unimplemented(curr);
+      WASM_UNREACHABLE("unimp");
+    }
+
+    Ref visitContNew(ContNew* curr) {
+      unimplemented(curr);
+      WASM_UNREACHABLE("unimp");
+    }
+    Ref visitResume(Resume* curr) {
       unimplemented(curr);
       WASM_UNREACHABLE("unimp");
     }

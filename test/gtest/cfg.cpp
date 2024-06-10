@@ -26,7 +26,7 @@ TEST_F(CFGTest, Print) {
         (drop
           (if (result i32)
             (i32.const 1)
-            (block
+            (then
               (loop $loop
                 (br_if $loop
                   (i32.const 2)
@@ -34,8 +34,10 @@ TEST_F(CFGTest, Print) {
               )
               (i32.const 3)
             )
-            (return
-              (i32.const 4)
+            (else
+              (return
+               (i32.const 4)
+              )
             )
           )
         )
@@ -44,6 +46,7 @@ TEST_F(CFGTest, Print) {
   )wasm";
 
   auto cfgText = R"cfg(;; preds: [], succs: [1, 5]
+;; entry
 0:
   0: i32.const 0
   1: drop
@@ -64,17 +67,21 @@ TEST_F(CFGTest, Print) {
 ;; preds: [3], succs: [6]
 4:
   6: i32.const 3
-  7: block
+  7: block (result i32)
 
-;; preds: [0], succs: []
+;; preds: [0], succs: [7]
 5:
   8: i32.const 4
   9: return
 
-;; preds: [4], succs: []
+;; preds: [4], succs: [7]
 6:
   10: drop
   11: block
+
+;; preds: [5, 6], succs: []
+;; exit
+7:
 )cfg";
 
   Module wasm;
@@ -110,16 +117,66 @@ TEST_F(CFGTest, CallBlock) {
   )wasm";
 
   auto cfgText = R"cfg(;; preds: [], succs: [1]
+;; entry
 0:
   0: i32.const 0
   1: drop
   2: call $bar
 
 ;; preds: [0], succs: []
+;; exit
 1:
   3: i32.const 1
   4: drop
   5: block
+)cfg";
+
+  Module wasm;
+  parseWast(wasm, moduleText);
+
+  CFG cfg = CFG::fromFunction(wasm.getFunction("foo"));
+
+  std::stringstream ss;
+  cfg.print(ss);
+
+  EXPECT_EQ(ss.str(), cfgText);
+}
+
+TEST_F(CFGTest, Empty) {
+  // Check that we create a correct CFG for an empty function.
+  auto moduleText = R"wasm(
+    (module (func $foo))
+  )wasm";
+
+  auto cfgText = R"cfg(;; preds: [], succs: []
+;; entry
+;; exit
+0:
+  0: nop
+)cfg";
+
+  Module wasm;
+  parseWast(wasm, moduleText);
+
+  CFG cfg = CFG::fromFunction(wasm.getFunction("foo"));
+
+  std::stringstream ss;
+  cfg.print(ss);
+
+  EXPECT_EQ(ss.str(), cfgText);
+}
+
+TEST_F(CFGTest, Unreachable) {
+  // Check that we create a correct CFG for a function that does not return. In
+  // particular, it should not have an exit block.
+  auto moduleText = R"wasm(
+    (module (func $foo (unreachable)))
+  )wasm";
+
+  auto cfgText = R"cfg(;; preds: [], succs: []
+;; entry
+0:
+  0: unreachable
 )cfg";
 
   Module wasm;
@@ -175,7 +232,7 @@ TEST_F(CFGTest, BlockIndexes) {
       (func $foo
         (if
           (i32.const 1)
-          (block
+          (then
             (drop
               (i32.const 2)
             )
@@ -213,9 +270,9 @@ TEST_F(CFGTest, LinearReachingDefinitions) {
   auto moduleText = R"wasm(
     (module
       (func $bar
-        (local $a (i32))
-        (local $b (i32))
-        (local $c (i32))
+        (local $a i32)
+        (local $b i32)
+        (local $c i32)
         (local.set $a
           (i32.const 1)
         )
@@ -278,8 +335,8 @@ TEST_F(CFGTest, ReachingDefinitionsIf) {
   auto moduleText = R"wasm(
     (module
       (func $bar
-        (local $a (i32))
-        (local $b (i32))
+        (local $a i32)
+        (local $b i32)
         (local.set $a
           (i32.const 1)
         )
@@ -288,11 +345,15 @@ TEST_F(CFGTest, ReachingDefinitionsIf) {
             (local.get $a)
             (i32.const 2)
           )
-          (local.set $b
-            (i32.const 3)
+          (then
+            (local.set $b
+              (i32.const 3)
+            )
           )
-          (local.set $a
-            (i32.const 4)
+          (else
+            (local.set $a
+              (i32.const 4)
+            )
           )
         )
         (drop
@@ -345,7 +406,7 @@ TEST_F(CFGTest, ReachingDefinitionsIf) {
 TEST_F(CFGTest, ReachingDefinitionsLoop) {
   auto moduleText = R"wasm(
     (module
-      (func $bar (param $a (i32)) (param $b (i32))
+      (func $bar (param $a i32) (param $b i32)
         (loop $loop
           (drop
             (local.get $a)
@@ -410,101 +471,4 @@ TEST_F(CFGTest, ReachingDefinitionsLoop) {
   expectedResult[getA4].insert(setA);
 
   EXPECT_EQ(expectedResult, getSetses);
-}
-
-TEST_F(CFGTest, StackLatticeFunctioning) {
-  FiniteIntPowersetLattice contentLattice(4);
-  StackLattice<FiniteIntPowersetLattice> stackLattice(contentLattice);
-
-  // These are constructed as expected references to compare everything else.
-  StackLattice<FiniteIntPowersetLattice>::Element expectedStack =
-    stackLattice.getBottom();
-  FiniteIntPowersetLattice::Element expectedStackElement =
-    contentLattice.getBottom();
-
-  StackLattice<FiniteIntPowersetLattice>::Element firstStack =
-    stackLattice.getBottom();
-  StackLattice<FiniteIntPowersetLattice>::Element secondStack =
-    stackLattice.getBottom();
-
-  for (size_t i = 0; i < 4; i++) {
-    FiniteIntPowersetLattice::Element temp = contentLattice.getBottom();
-    for (size_t j = 0; j <= i; j++) {
-      temp.set(j, true);
-    }
-    firstStack.push(temp);
-    secondStack.push(temp);
-    if (i < 2) {
-      expectedStack.push(temp);
-    }
-  }
-
-  EXPECT_EQ(stackLattice.compare(firstStack, secondStack),
-            LatticeComparison::EQUAL);
-
-  for (size_t j = 0; j < 4; ++j) {
-    expectedStackElement.set(j, true);
-  }
-
-  EXPECT_EQ(contentLattice.compare(secondStack.pop(), expectedStackElement),
-            LatticeComparison::EQUAL);
-  expectedStackElement.set(3, false);
-  EXPECT_EQ(contentLattice.compare(secondStack.pop(), expectedStackElement),
-            LatticeComparison::EQUAL);
-
-  EXPECT_EQ(stackLattice.compare(firstStack, secondStack),
-            LatticeComparison::GREATER);
-  EXPECT_EQ(stackLattice.compare(secondStack, firstStack),
-            LatticeComparison::LESS);
-
-  EXPECT_EQ(stackLattice.compare(secondStack, expectedStack),
-            LatticeComparison::EQUAL);
-
-  {
-    expectedStack.stackTop().set(0, false);
-    expectedStack.stackTop().set(2, true);
-    FiniteIntPowersetLattice::Element temp = expectedStack.pop();
-    expectedStack.stackTop().set(3, true);
-    expectedStack.push(temp);
-
-    FiniteIntPowersetLattice::Element temp2 = contentLattice.getBottom();
-    temp2.set(1, true);
-    temp2.set(3, true);
-    expectedStack.push(temp2);
-  }
-
-  StackLattice<FiniteIntPowersetLattice>::Element thirdStack =
-    stackLattice.getBottom();
-  {
-    FiniteIntPowersetLattice::Element temp = contentLattice.getBottom();
-    temp.set(0, true);
-    temp.set(3, true);
-    FiniteIntPowersetLattice::Element temp2 = contentLattice.getBottom();
-    temp2.set(1, true);
-    temp2.set(2, true);
-    FiniteIntPowersetLattice::Element temp3 = contentLattice.getBottom();
-    temp3.set(1, true);
-    temp3.set(3, true);
-    thirdStack.push(std::move(temp));
-    thirdStack.push(std::move(temp2));
-    thirdStack.push(std::move(temp3));
-  }
-
-  EXPECT_EQ(stackLattice.compare(secondStack, thirdStack),
-            LatticeComparison::NO_RELATION);
-
-  EXPECT_EQ(stackLattice.compare(thirdStack, expectedStack),
-            LatticeComparison::EQUAL);
-
-  EXPECT_TRUE(stackLattice.join(thirdStack, secondStack));
-
-  {
-    expectedStack.stackTop().set(0, true);
-    FiniteIntPowersetLattice::Element temp = expectedStack.pop();
-    expectedStack.stackTop().set(0, true);
-    expectedStack.push(temp);
-  }
-
-  EXPECT_EQ(stackLattice.compare(thirdStack, expectedStack),
-            LatticeComparison::EQUAL);
 }

@@ -9,7 +9,6 @@
 ;; state.
 
 (module
-  (memory 1 2)
   ;; CHECK:      (type $f (func))
   (type $f (func))
   ;; CHECK:      (type $1 (func (result i32)))
@@ -22,6 +21,9 @@
   (import "env" "import2" (func $import2 (result i32)))
   ;; CHECK:      (import "env" "import3" (func $import3 (param i32)))
   (import "env" "import3" (func $import3 (param i32)))
+
+  (memory 1 2)
+
   (table funcref (elem $calls-import2-drop $calls-import2-drop))
   ;; CHECK:      (global $__asyncify_state (mut i32) (i32.const 0))
 
@@ -59,7 +61,9 @@
   ;; CHECK-NEXT:     (global.get $__asyncify_state)
   ;; CHECK-NEXT:     (local.get $0)
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:    (then
+  ;; CHECK-NEXT:     (unreachable)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -82,7 +86,9 @@
   ;; CHECK-NEXT:      (global.get $__asyncify_state)
   ;; CHECK-NEXT:      (local.get $0)
   ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (unreachable)
+  ;; CHECK-NEXT:     (then
+  ;; CHECK-NEXT:      (unreachable)
+  ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (local.get $1)
   ;; CHECK-NEXT:   )
@@ -109,7 +115,9 @@
   ;; CHECK-NEXT:       (global.get $__asyncify_state)
   ;; CHECK-NEXT:       (local.get $1)
   ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (unreachable)
+  ;; CHECK-NEXT:      (then
+  ;; CHECK-NEXT:       (unreachable)
+  ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:     (local.get $2)
   ;; CHECK-NEXT:    )
@@ -136,7 +144,9 @@
   ;; CHECK-NEXT:     (global.get $__asyncify_state)
   ;; CHECK-NEXT:     (local.get $1)
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:    (then
+  ;; CHECK-NEXT:     (unreachable)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -170,7 +180,9 @@
 ;; CHECK-NEXT:     (global.get $__asyncify_data)
 ;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
-;; CHECK-NEXT:   (unreachable)
+;; CHECK-NEXT:   (then
+;; CHECK-NEXT:    (unreachable)
+;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT: )
 
@@ -187,7 +199,9 @@
 ;; CHECK-NEXT:     (global.get $__asyncify_data)
 ;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
-;; CHECK-NEXT:   (unreachable)
+;; CHECK-NEXT:   (then
+;; CHECK-NEXT:    (unreachable)
+;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT: )
 
@@ -207,7 +221,9 @@
 ;; CHECK-NEXT:     (global.get $__asyncify_data)
 ;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
-;; CHECK-NEXT:   (unreachable)
+;; CHECK-NEXT:   (then
+;; CHECK-NEXT:    (unreachable)
+;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT: )
 
@@ -224,7 +240,9 @@
 ;; CHECK-NEXT:     (global.get $__asyncify_data)
 ;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
-;; CHECK-NEXT:   (unreachable)
+;; CHECK-NEXT:   (then
+;; CHECK-NEXT:    (unreachable)
+;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT: )
 

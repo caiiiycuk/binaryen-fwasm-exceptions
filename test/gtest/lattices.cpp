@@ -20,6 +20,8 @@
 #include "analysis/lattices/int.h"
 #include "analysis/lattices/inverted.h"
 #include "analysis/lattices/lift.h"
+#include "analysis/lattices/shared.h"
+#include "analysis/lattices/stack.h"
 #include "analysis/lattices/tuple.h"
 #include "analysis/lattices/valtype.h"
 #include "analysis/lattices/vector.h"
@@ -476,6 +478,30 @@ TEST(VectorLattice, Meet) {
     vector, {false, false}, {false, true}, {true, false}, {true, true});
 }
 
+TEST(VectorLattice, JoinSingleton) {
+  using Vec = analysis::Vector<analysis::Bool>;
+  Vec vector{analysis::Bool{}, 2};
+  auto elem = vector.getBottom();
+
+  EXPECT_FALSE(vector.join(elem, Vec::SingletonElement(0, false)));
+  EXPECT_EQ(elem, (std::vector{false, false}));
+
+  EXPECT_TRUE(vector.join(elem, Vec::SingletonElement(1, true)));
+  EXPECT_EQ(elem, (std::vector{false, true}));
+}
+
+TEST(VectorLattice, MeetSingleton) {
+  using Vec = analysis::Vector<analysis::Bool>;
+  Vec vector{analysis::Bool{}, 2};
+  auto elem = vector.getTop();
+
+  EXPECT_FALSE(vector.meet(elem, Vec::SingletonElement(1, true)));
+  EXPECT_EQ(elem, (std::vector{true, true}));
+
+  EXPECT_TRUE(vector.meet(elem, Vec::SingletonElement(0, false)));
+  EXPECT_EQ(elem, (std::vector{false, true}));
+}
+
 TEST(TupleLattice, GetBottom) {
   analysis::Tuple<analysis::Bool, analysis::UInt32> tuple{analysis::Bool{},
                                                           analysis::UInt32{}};
@@ -545,4 +571,155 @@ TEST(ValTypeLattice, Meet) {
                   Type(HeapType::struct_, NonNullable),
                   Type(HeapType::array, Nullable),
                   Type(HeapType::eq, Nullable));
+}
+
+TEST(SharedLattice, GetBottom) {
+  analysis::Shared<analysis::UInt32> shared{analysis::UInt32{}};
+  EXPECT_EQ(*shared.getBottom(), 0u);
+}
+
+TEST(SharedLattice, Compare) {
+  analysis::Shared<analysis::UInt32> shared{analysis::UInt32{}};
+
+  auto zero = shared.getBottom();
+
+  auto one = shared.getBottom();
+  shared.join(one, 1);
+
+  // This join will not change the value.
+  auto uno = one;
+  shared.join(uno, 1);
+
+  auto two = shared.getBottom();
+  shared.join(two, 2);
+
+  EXPECT_EQ(shared.compare(zero, zero), analysis::EQUAL);
+  EXPECT_EQ(shared.compare(zero, one), analysis::LESS);
+  EXPECT_EQ(shared.compare(zero, uno), analysis::LESS);
+  EXPECT_EQ(shared.compare(zero, two), analysis::LESS);
+
+  EXPECT_EQ(shared.compare(one, zero), analysis::GREATER);
+  EXPECT_EQ(shared.compare(one, one), analysis::EQUAL);
+  EXPECT_EQ(shared.compare(one, uno), analysis::EQUAL);
+  EXPECT_EQ(shared.compare(one, two), analysis::LESS);
+
+  EXPECT_EQ(shared.compare(two, zero), analysis::GREATER);
+  EXPECT_EQ(shared.compare(two, one), analysis::GREATER);
+  EXPECT_EQ(shared.compare(two, uno), analysis::GREATER);
+  EXPECT_EQ(shared.compare(two, two), analysis::EQUAL);
+
+  EXPECT_EQ(*zero, 2u);
+  EXPECT_EQ(*one, 2u);
+  EXPECT_EQ(*uno, 2u);
+  EXPECT_EQ(*two, 2u);
+}
+
+TEST(SharedLattice, Join) {
+  analysis::Shared<analysis::UInt32> shared{analysis::UInt32{}};
+
+  auto zero = shared.getBottom();
+
+  auto one = shared.getBottom();
+  shared.join(one, 1);
+
+  auto two = shared.getBottom();
+  shared.join(two, 2);
+
+  {
+    auto elem = zero;
+    EXPECT_FALSE(shared.join(elem, zero));
+    EXPECT_EQ(elem, zero);
+  }
+
+  {
+    auto elem = zero;
+    EXPECT_TRUE(shared.join(elem, one));
+    EXPECT_EQ(elem, one);
+  }
+
+  {
+    auto elem = zero;
+    EXPECT_TRUE(shared.join(elem, two));
+    EXPECT_EQ(elem, two);
+  }
+
+  {
+    auto elem = one;
+    EXPECT_FALSE(shared.join(elem, zero));
+    EXPECT_EQ(elem, one);
+  }
+
+  {
+    auto elem = one;
+    EXPECT_FALSE(shared.join(elem, one));
+    EXPECT_EQ(elem, one);
+  }
+
+  {
+    auto elem = one;
+    EXPECT_TRUE(shared.join(elem, two));
+    EXPECT_EQ(elem, two);
+  }
+
+  {
+    auto elem = two;
+    EXPECT_FALSE(shared.join(elem, zero));
+    EXPECT_EQ(elem, two);
+  }
+
+  {
+    auto elem = two;
+    EXPECT_FALSE(shared.join(elem, one));
+    EXPECT_EQ(elem, two);
+  }
+
+  {
+    auto elem = two;
+    EXPECT_FALSE(shared.join(elem, two));
+    EXPECT_EQ(elem, two);
+  }
+}
+
+TEST(SharedLattice, JoinVecSingleton) {
+  using Vec = analysis::Vector<analysis::Bool>;
+  analysis::Shared<Vec> shared{analysis::Vector{analysis::Bool{}, 2}};
+
+  auto elem = shared.getBottom();
+  EXPECT_TRUE(shared.join(elem, Vec::SingletonElement(1, true)));
+  EXPECT_EQ(*elem, (std::vector{false, true}));
+}
+
+TEST(SharedLattice, JoinInvertedVecSingleton) {
+  using Vec = analysis::Vector<analysis::Bool>;
+  analysis::Shared<analysis::Inverted<Vec>> shared{
+    analysis::Inverted{analysis::Vector{analysis::Bool{}, 2}}};
+
+  auto elem = shared.getBottom();
+  EXPECT_TRUE(shared.join(elem, Vec::SingletonElement(1, false)));
+  EXPECT_EQ(*elem, (std::vector{true, false}));
+}
+
+TEST(StackLattice, GetBottom) {
+  analysis::Stack stack{analysis::Flat<uint32_t>{}};
+  EXPECT_EQ(stack.getBottom().size(), 0u);
+}
+
+TEST(StackLattice, Compare) {
+  analysis::Stack stack{analysis::Flat<uint32_t>{}};
+  auto& flat = stack.lattice;
+  testDiamondCompare(stack,
+                     {},
+                     {flat.get(0)},
+                     {flat.get(0), flat.get(1)},
+                     {flat.get(0), flat.getTop()});
+}
+
+TEST(StackLattice, Join) {
+  analysis::Stack stack{analysis::Flat<uint32_t>{}};
+  auto& flat = stack.lattice;
+  testDiamondJoin(stack,
+                  {},
+                  {flat.get(0)},
+                  {flat.get(0), flat.get(1)},
+                  {flat.get(0), flat.getTop()});
 }

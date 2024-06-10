@@ -7,7 +7,7 @@ cmake_minimum_required(VERSION 3.10.2)
 # to reduce this for compatability with emsdk.
 set(CMAKE_OSX_DEPLOYMENT_TARGET "10.14" CACHE STRING "Minimum OS X deployment version")
 
-project(binaryen LANGUAGES C CXX VERSION 116)
+project(binaryen LANGUAGES C CXX VERSION 117)
 include(GNUInstallDirs)
 
 # The C++ standard whose features are required to build Binaryen.
@@ -46,8 +46,14 @@ option(BUILD_EMSCRIPTEN_TOOLS_ONLY "Build only tools needed by emscripten" OFF)
 # Turn this on to build binaryen.js as ES5, with additional compatibility configuration for js_of_ocaml.
 option(JS_OF_OCAML "Build binaryen.js for js_of_ocaml" OFF)
 
+# Turn this on to compile binaryen toolchain utilities for the browser.
+option(BUILD_FOR_BROWSER "Build binaryen toolchain utilities for the browser" OFF)
+
 # Turn this on to use the Wasm EH feature instead of emscripten EH in the wasm/BinaryenJS builds
 option(EMSCRIPTEN_ENABLE_WASM_EH "Enable Wasm EH feature in emscripten build" OFF)
+
+# Turn this on to use pthreads feature in the wasm/BinaryenJS builds
+option(EMSCRIPTEN_ENABLE_PTHREADS "Enable pthreads in emscripten build" OFF)
 
 # For git users, attempt to generate a more useful version string
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
@@ -280,6 +286,11 @@ else()
   add_compile_flag("-Wimplicit-fallthrough")
   add_compile_flag("-Wnon-virtual-dtor")
 
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    # Google style requires this, so make sure we compile cleanly with it.
+    add_compile_flag("-Wctad-maybe-unsupported")
+  endif()
+
   if(WIN32)
     add_compile_flag("-D_GNU_SOURCE")
     add_compile_flag("-D__STDC_FORMAT_MACROS")
@@ -319,7 +330,6 @@ if(EMSCRIPTEN)
   endif()
 
   if("${CMAKE_BUILD_TYPE}" MATCHES "Release")
-    add_link_flag("-sSINGLE_FILE")
     # Extra check that cmake has set -O3 in its release flags.
     # This is really as an assertion that cmake is behaving as we expect.
     if(NOT CMAKE_CXX_FLAGS_RELEASE_INIT MATCHES "-O3")
@@ -328,17 +338,42 @@ if(EMSCRIPTEN)
   endif()
 
   add_link_flag("-sALLOW_MEMORY_GROWTH")
+  add_link_flag("-sSTACK_SIZE=5MB")
   if(EMSCRIPTEN_ENABLE_WASM_EH)
     add_compile_flag("-fwasm-exceptions")
   else()
     add_compile_flag("-sDISABLE_EXCEPTION_CATCHING=0")
     add_link_flag("-sDISABLE_EXCEPTION_CATCHING=0")
   endif()
-  # make the tools immediately usable on Node.js
-  add_link_flag("-sNODERAWFS")
-  # in opt builds, LTO helps so much (>20%) it's worth slow compile times
-  add_nondebug_compile_flag("-flto")
-endif()
+  if(EMSCRIPTEN_ENABLE_PTHREADS)
+    add_compile_flag("-pthread")
+    add_link_flag("-pthread")
+    # Use mimalloc to avoid a 5x slowdown:
+    # https://github.com/emscripten-core/emscripten/issues/15727#issuecomment-1960295018
+    add_link_flag("-sMALLOC=mimalloc")
+    # Disable the warning on pthreads+memory growth (we are not much affected by
+    # it as there is little wasm-JS transfer of data, almost all work is inside
+    # the wasm).
+    add_link_flag("-Wno-pthreads-mem-growth")
+  endif()
+  # In the browser, there is no natural place to provide commandline arguments
+  # for a commandline tool, so let the user run the main entry point themselves
+  # and pass in the arguments there.
+  if(BUILD_FOR_BROWSER)
+    add_link_flag("-sENVIRONMENT=web,worker")
+    add_link_flag("-sINVOKE_RUN=0")
+    add_link_flag("-sEXPORTED_RUNTIME_METHODS=run,callMain,FS")
+    add_link_flag("-sMODULARIZE")
+    add_link_flag("-sEXPORT_ES6")
+    add_link_flag("-sFILESYSTEM")
+    add_link_flag("-sFORCE_FILESYSTEM")    
+  else()
+    # On Node.js, make the tools immediately usable.
+    add_link_flag("-sNODERAWFS")
+  endif()
+    # in opt builds, LTO helps so much (>20%) it's worth slow compile times
+    add_nondebug_compile_flag("-flto")
+  endif()
 
 # clang doesn't print colored diagnostics when invoked from Ninja
 if(UNIX AND CMAKE_GENERATOR STREQUAL "Ninja")
@@ -439,14 +474,16 @@ if(EMSCRIPTEN)
   target_link_libraries(binaryen_wasm "-sFILESYSTEM")
   target_link_libraries(binaryen_wasm "-sEXPORT_NAME=Binaryen")
   target_link_libraries(binaryen_wasm "-sNODERAWFS=0")
+  # Emit a single file for convenience of people using binaryen.js as a library,
+  # so they only need to distribute a single file.
+  target_link_libraries(binaryen_wasm "-sSINGLE_FILE")
   target_link_libraries(binaryen_wasm "-sEXPORT_ES6")
-  target_link_libraries(binaryen_wasm "-sEXPORTED_RUNTIME_METHODS=allocateUTF8OnStack,stringToAscii")
+  target_link_libraries(binaryen_wasm "-sEXPORTED_RUNTIME_METHODS=stringToUTF8OnStack,stringToAscii")
   target_link_libraries(binaryen_wasm "-sEXPORTED_FUNCTIONS=_malloc,_free")
   target_link_libraries(binaryen_wasm "--post-js=${CMAKE_CURRENT_SOURCE_DIR}/src/js/binaryen.js-post.js")
   target_link_libraries(binaryen_wasm "-msign-ext")
   target_link_libraries(binaryen_wasm "-mbulk-memory")
   target_link_libraries(binaryen_wasm optimized "--closure=1")
-  target_link_libraries(binaryen_wasm optimized "--closure-args=\"--language_in=ECMASCRIPT6 --language_out=ECMASCRIPT6\"")
   # TODO: Fix closure warnings! (#5062)
   target_link_libraries(binaryen_wasm optimized "-Wno-error=closure")
   target_link_libraries(binaryen_wasm optimized "-flto")
@@ -472,6 +509,7 @@ if(EMSCRIPTEN)
     target_link_libraries(binaryen_js "-sFILESYSTEM=1")
   endif()
   target_link_libraries(binaryen_js "-sNODERAWFS=0")
+  target_link_libraries(binaryen_js "-sSINGLE_FILE")
   target_link_libraries(binaryen_js "-sEXPORT_NAME=Binaryen")
   # Currently, js_of_ocaml can only process ES5 code
   if(JS_OF_OCAML)
@@ -479,7 +517,7 @@ if(EMSCRIPTEN)
   else()
     target_link_libraries(binaryen_js "-sEXPORT_ES6=1")
   endif()
-  target_link_libraries(binaryen_js "-sEXPORTED_RUNTIME_METHODS=allocateUTF8OnStack,stringToAscii")
+  target_link_libraries(binaryen_js "-sEXPORTED_RUNTIME_METHODS=stringToUTF8OnStack,stringToAscii")
   target_link_libraries(binaryen_js "-sEXPORTED_FUNCTIONS=_malloc,_free")
   target_link_libraries(binaryen_js "--post-js=${CMAKE_CURRENT_SOURCE_DIR}/src/js/binaryen.js-post.js")
   # js_of_ocaml needs a specified variable with special comment to provide the library to consumers
@@ -489,9 +527,7 @@ if(EMSCRIPTEN)
   target_link_libraries(binaryen_js optimized "--closure=1")
   # Currently, js_of_ocaml can only process ES5 code
   if(JS_OF_OCAML)
-    target_link_libraries(binaryen_js optimized "--closure-args=\"--language_in=ECMASCRIPT6 --language_out=ECMASCRIPT5\"")
-  else()
-    target_link_libraries(binaryen_js optimized "--closure-args=\"--language_in=ECMASCRIPT6 --language_out=ECMASCRIPT6\"")
+    target_link_libraries(binaryen_js optimized "--closure-args=\"--language_out=ECMASCRIPT5\"")
   endif()
   # TODO: Fix closure warnings! (#5062)
   target_link_libraries(binaryen_js optimized "-Wno-error=closure")

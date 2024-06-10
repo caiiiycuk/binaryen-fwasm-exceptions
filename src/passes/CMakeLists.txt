@@ -1,11 +1,10 @@
 file(READ wasm-intrinsics.wat WASM_INTRINSICS_WAT HEX)
+set(CMAKE_CONFIGURE_DEPENDS wasm-intrinsics.wat)
 
 string(REGEX MATCHALL "([A-Fa-f0-9][A-Fa-f0-9])" SEPARATED_HEX ${WASM_INTRINSICS_WAT})
 
-set(WASM_INTRINSICS_SIZE 1)
 foreach (hex IN LISTS SEPARATED_HEX)
   string(APPEND WASM_INTRINSICS_EMBED "0x${hex},")
-  math(EXPR WASM_INTRINSICS_SIZE "${WASM_INTRINSICS_SIZE}+1")
 endforeach ()
 string(APPEND WASM_INTRINSICS_EMBED "0x00")
 
@@ -45,12 +44,14 @@ set(passes_SOURCES
   GlobalTypeOptimization.cpp
   GUFA.cpp
   hash-stringify-walker.cpp
+  Outlining.cpp
   Heap2Local.cpp
   I64ToI32Lowering.cpp
   Inlining.cpp
   InstrumentLocals.cpp
   InstrumentMemory.cpp
   Intrinsics.cpp
+  J2CLOpts.cpp
   JSPI.cpp
   LegalizeJSInterface.cpp
   LimitSegments.cpp
@@ -69,6 +70,7 @@ set(passes_SOURCES
   MultiMemoryLowering.cpp
   NameList.cpp
   NameTypes.cpp
+  NoInline.cpp
   OnceReduction.cpp
   OptimizeAddedConstants.cpp
   OptimizeCasts.cpp
@@ -88,6 +90,7 @@ set(passes_SOURCES
   SignaturePruning.cpp
   SignatureRefining.cpp
   SignExtLowering.cpp
+  StringLowering.cpp
   Strip.cpp
   StripTargetFeatures.cpp
   RedundantSetElimination.cpp
@@ -103,10 +106,12 @@ set(passes_SOURCES
   ReorderLocals.cpp
   ReReloop.cpp
   TrapMode.cpp
+  TypeGeneralizing.cpp
   TypeRefining.cpp
   TypeMerging.cpp
   TypeSSA.cpp
   SafeHeap.cpp
+  SeparateDataSegments.cpp
   SimplifyGlobals.cpp
   SimplifyLocals.cpp
   Souperify.cpp
@@ -115,6 +120,7 @@ set(passes_SOURCES
   StripEH.cpp
   SSAify.cpp
   TupleOptimization.cpp
+  TranslateEH.cpp
   TypeFinalizing.cpp
   Unsubtyping.cpp
   Untee.cpp
@@ -129,5 +135,6 @@ if(EMSCRIPTEN)
   list(REMOVE_ITEM passes_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/stringify-walker.h)
   list(REMOVE_ITEM passes_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/stringify-walker-impl.h)
   list(REMOVE_ITEM passes_SOURCES "hash-stringify-walker.cpp")
+  list(REMOVE_ITEM passes_SOURCES "Outlining.cpp")
 endif()
 add_library(passes OBJECT ${passes_SOURCES})

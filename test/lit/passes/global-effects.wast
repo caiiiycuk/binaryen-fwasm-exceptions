@@ -16,8 +16,6 @@
   ;; WITHOUT:      (type $2 (func (param i32)))
 
   ;; WITHOUT:      (import "a" "b" (func $import (type $0)))
-
-  ;; WITHOUT:      (tag $tag)
   ;; INCLUDE:      (type $0 (func))
 
   ;; INCLUDE:      (type $1 (func (result i32)))
@@ -25,8 +23,6 @@
   ;; INCLUDE:      (type $2 (func (param i32)))
 
   ;; INCLUDE:      (import "a" "b" (func $import (type $0)))
-
-  ;; INCLUDE:      (tag $tag)
   ;; DISCARD:      (type $0 (func))
 
   ;; DISCARD:      (type $1 (func (result i32)))
@@ -34,11 +30,12 @@
   ;; DISCARD:      (type $2 (func (param i32)))
 
   ;; DISCARD:      (import "a" "b" (func $import (type $0)))
+  (import "a" "b" (func $import))
 
+  ;; WITHOUT:      (tag $tag)
+  ;; INCLUDE:      (tag $tag)
   ;; DISCARD:      (tag $tag)
   (tag $tag)
-
-  (import "a" "b" (func $import))
 
   ;; WITHOUT:      (func $main (type $0)
   ;; WITHOUT-NEXT:  (call $nop)
@@ -330,8 +327,12 @@
   ;; WITHOUT-NEXT:   (do
   ;; WITHOUT-NEXT:    (if
   ;; WITHOUT-NEXT:     (local.get $x)
-  ;; WITHOUT-NEXT:     (call $throw)
-  ;; WITHOUT-NEXT:     (call $unreachable)
+  ;; WITHOUT-NEXT:     (then
+  ;; WITHOUT-NEXT:      (call $throw)
+  ;; WITHOUT-NEXT:     )
+  ;; WITHOUT-NEXT:     (else
+  ;; WITHOUT-NEXT:      (call $unreachable)
+  ;; WITHOUT-NEXT:     )
   ;; WITHOUT-NEXT:    )
   ;; WITHOUT-NEXT:   )
   ;; WITHOUT-NEXT:   (catch_all
@@ -344,8 +345,12 @@
   ;; INCLUDE-NEXT:   (do
   ;; INCLUDE-NEXT:    (if
   ;; INCLUDE-NEXT:     (local.get $x)
-  ;; INCLUDE-NEXT:     (call $throw)
-  ;; INCLUDE-NEXT:     (call $unreachable)
+  ;; INCLUDE-NEXT:     (then
+  ;; INCLUDE-NEXT:      (call $throw)
+  ;; INCLUDE-NEXT:     )
+  ;; INCLUDE-NEXT:     (else
+  ;; INCLUDE-NEXT:      (call $unreachable)
+  ;; INCLUDE-NEXT:     )
   ;; INCLUDE-NEXT:    )
   ;; INCLUDE-NEXT:   )
   ;; INCLUDE-NEXT:   (catch_all
@@ -358,8 +363,12 @@
   ;; DISCARD-NEXT:   (do
   ;; DISCARD-NEXT:    (if
   ;; DISCARD-NEXT:     (local.get $x)
-  ;; DISCARD-NEXT:     (call $throw)
-  ;; DISCARD-NEXT:     (call $unreachable)
+  ;; DISCARD-NEXT:     (then
+  ;; DISCARD-NEXT:      (call $throw)
+  ;; DISCARD-NEXT:     )
+  ;; DISCARD-NEXT:     (else
+  ;; DISCARD-NEXT:      (call $unreachable)
+  ;; DISCARD-NEXT:     )
   ;; DISCARD-NEXT:    )
   ;; DISCARD-NEXT:   )
   ;; DISCARD-NEXT:   (catch_all
@@ -374,8 +383,12 @@
       (do
         (if
           (local.get $x)
-          (call $throw)
-          (call $unreachable)
+          (then
+            (call $throw)
+          )
+          (else
+            (call $unreachable)
+          )
         )
       )
       (catch_all)
@@ -407,8 +420,12 @@
   (func $throw-and-import
     (if
       (i32.const 1)
-      (throw $tag)
-      (call $import)
+      (then
+        (throw $tag)
+      )
+      (else
+        (call $import)
+      )
     )
   )
 

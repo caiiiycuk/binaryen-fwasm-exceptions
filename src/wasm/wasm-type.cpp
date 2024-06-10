@@ -472,6 +472,7 @@ std::optional<HeapType> getBasicHeapTypeLUB(HeapType::BasicHeapType a,
   switch (a) {
     case HeapType::ext:
     case HeapType::func:
+    case HeapType::exn:
       return std::nullopt;
     case HeapType::any:
       return {HeapType::any};
@@ -500,6 +501,7 @@ std::optional<HeapType> getBasicHeapTypeLUB(HeapType::BasicHeapType a,
     case HeapType::none:
     case HeapType::noext:
     case HeapType::nofunc:
+    case HeapType::noexn:
       // Bottom types already handled.
       break;
   }
@@ -801,6 +803,10 @@ bool Type::isStruct() const { return isRef() && getHeapType().isStruct(); }
 
 bool Type::isArray() const { return isRef() && getHeapType().isArray(); }
 
+bool Type::isException() const {
+  return isRef() && getHeapType().isException();
+}
+
 bool Type::isString() const { return isRef() && getHeapType().isString(); }
 
 bool Type::isDefaultable() const {
@@ -916,6 +922,11 @@ FeatureSet Type::getFeatures() const {
                 // Technically introduced in GC, but used internally as part of
                 // ref.null with just reference types.
                 feats |= FeatureSet::ReferenceTypes;
+                return;
+              case HeapType::exn:
+              case HeapType::noexn:
+                feats |=
+                  FeatureSet::ExceptionHandling | FeatureSet::ReferenceTypes;
                 return;
             }
           }
@@ -1152,7 +1163,8 @@ bool HeapType::isFunction() const {
 
 bool HeapType::isData() const {
   if (isBasic()) {
-    return id == struct_ || id == array || id == string;
+    return id == struct_ || id == array || id == string ||
+           id == stringview_wtf16;
   } else {
     return getHeapTypeInfo(*this)->isData();
   }
@@ -1190,6 +1202,8 @@ bool HeapType::isArray() const {
   }
 }
 
+bool HeapType::isException() const { return *this == HeapType::exn; }
+
 bool HeapType::isString() const { return *this == HeapType::string; }
 
 bool HeapType::isBottom() const {
@@ -1202,6 +1216,7 @@ bool HeapType::isBottom() const {
       case i31:
       case struct_:
       case array:
+      case exn:
       case string:
       case stringview_wtf8:
       case stringview_wtf16:
@@ -1210,6 +1225,7 @@ bool HeapType::isBottom() const {
       case none:
       case noext:
       case nofunc:
+      case noexn:
         return true;
     }
   }
@@ -1270,6 +1286,8 @@ std::optional<HeapType> HeapType::getSuperType() const {
       case nofunc:
       case any:
       case none:
+      case exn:
+      case noexn:
       case string:
       case stringview_wtf8:
       case stringview_wtf16:
@@ -1326,6 +1344,7 @@ size_t HeapType::getDepth() const {
       case HeapType::ext:
       case HeapType::func:
       case HeapType::any:
+      case HeapType::exn:
         break;
       case HeapType::eq:
         depth++;
@@ -1342,6 +1361,7 @@ size_t HeapType::getDepth() const {
       case HeapType::none:
       case HeapType::nofunc:
       case HeapType::noext:
+      case HeapType::noexn:
         // Bottom types are infinitely deep.
         depth = size_t(-1l);
     }
@@ -1356,6 +1376,8 @@ HeapType::BasicHeapType HeapType::getBottom() const {
         return noext;
       case func:
         return nofunc;
+      case exn:
+        return noexn;
       case any:
       case eq:
       case i31:
@@ -1371,6 +1393,8 @@ HeapType::BasicHeapType HeapType::getBottom() const {
         return noext;
       case nofunc:
         return nofunc;
+      case noexn:
+        return noexn;
     }
   }
   auto* info = getHeapTypeInfo(*this);
@@ -1384,6 +1408,20 @@ HeapType::BasicHeapType HeapType::getBottom() const {
       return none;
   }
   WASM_UNREACHABLE("unexpected kind");
+}
+
+HeapType::BasicHeapType HeapType::getTop() const {
+  switch (getBottom()) {
+    case none:
+      return any;
+    case nofunc:
+      return func;
+    case noext:
+      return ext;
+    default:
+      break;
+  }
+  WASM_UNREACHABLE("unexpected type");
 }
 
 bool HeapType::isSubType(HeapType left, HeapType right) {
@@ -1658,6 +1696,8 @@ bool SubTyper::isSubType(HeapType a, HeapType b) {
         return a.getBottom() == HeapType::noext;
       case HeapType::func:
         return a.getBottom() == HeapType::nofunc;
+      case HeapType::exn:
+        return a.getBottom() == HeapType::noexn;
       case HeapType::any:
         return a.getBottom() == HeapType::none;
       case HeapType::eq:
@@ -1678,6 +1718,7 @@ bool SubTyper::isSubType(HeapType a, HeapType b) {
       case HeapType::none:
       case HeapType::noext:
       case HeapType::nofunc:
+      case HeapType::noexn:
         return false;
     }
   }
@@ -1748,7 +1789,7 @@ void TypePrinter::printHeapTypeName(HeapType type) {
     print(type);
     return;
   }
-  os << '$' << generator(type).name;
+  generator(type).name.print(os);
 #if TRACE_CANONICALIZATION
   os << "(;" << ((type.getID() >> 4) % 1000) << ";) ";
 #endif
@@ -1802,6 +1843,8 @@ std::ostream& TypePrinter::print(Type type) {
             return os << "structref";
           case HeapType::array:
             return os << "arrayref";
+          case HeapType::exn:
+            return os << "exnref";
           case HeapType::string:
             return os << "stringref";
           case HeapType::stringview_wtf8:
@@ -1816,6 +1859,8 @@ std::ostream& TypePrinter::print(Type type) {
             return os << "nullexternref";
           case HeapType::nofunc:
             return os << "nullfuncref";
+          case HeapType::noexn:
+            return os << "nullexnref";
         }
       }
     }
@@ -1848,6 +1893,8 @@ std::ostream& TypePrinter::print(HeapType type) {
         return os << "struct";
       case HeapType::array:
         return os << "array";
+      case HeapType::exn:
+        return os << "exn";
       case HeapType::string:
         return os << "string";
       case HeapType::stringview_wtf8:
@@ -1862,12 +1909,15 @@ std::ostream& TypePrinter::print(HeapType type) {
         return os << "noextern";
       case HeapType::nofunc:
         return os << "nofunc";
+      case HeapType::noexn:
+        return os << "noexn";
     }
   }
 
   auto names = generator(type);
 
-  os << "(type $" << names.name << ' ';
+  os << "(type ";
+  names.name.print(os) << ' ';
 
   if (isTemp(type)) {
     os << "(; temp ;) ";
@@ -1904,11 +1954,9 @@ std::ostream& TypePrinter::print(HeapType type) {
 }
 
 std::ostream& TypePrinter::print(const Tuple& tuple) {
-  os << '(';
-  auto sep = "";
+  os << "(tuple";
   for (Type type : tuple) {
-    os << sep;
-    sep = " ";
+    os << ' ';
     print(type);
   }
   return os << ')';
@@ -1972,7 +2020,7 @@ TypePrinter::print(const Struct& struct_,
     // TODO: move this to the function for printing fields.
     os << " (field ";
     if (auto it = fieldNames.find(i); it != fieldNames.end()) {
-      os << '$' << it->second << ' ';
+      it->second.print(os) << ' ';
     }
     print(struct_.fields[i]);
     os << ')';

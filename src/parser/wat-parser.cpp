@@ -60,8 +60,7 @@ namespace wasm::WATParser {
 
 namespace {
 
-Result<IndexMap> createIndexMap(ParseInput& in,
-                                const std::vector<DefPos>& defs) {
+Result<IndexMap> createIndexMap(Lexer& in, const std::vector<DefPos>& defs) {
   IndexMap indices;
   for (auto& def : defs) {
     if (def.name.is()) {
@@ -80,9 +79,13 @@ Result<> parseDefs(Ctx& ctx,
   for (auto& def : defs) {
     ctx.index = def.index;
     WithPosition with(ctx, def.pos);
-    auto parsed = parser(ctx);
-    CHECK_ERR(parsed);
-    assert(parsed);
+    if (auto parsed = parser(ctx)) {
+      CHECK_ERR(parsed);
+    } else {
+      auto im = import_(ctx);
+      assert(im);
+      CHECK_ERR(im);
+    }
   }
   return Ok{};
 }
@@ -106,6 +109,7 @@ Result<> parseModule(Module& wasm, std::string_view input) {
 
   // Parse type definitions.
   std::vector<HeapType> types;
+  std::unordered_map<HeapType, std::unordered_map<Name, Index>> typeNames;
   {
     TypeBuilder builder(decls.subtypeDefs.size());
     ParseTypeDefsCtx ctx(input, builder, *typeIndices);
@@ -120,11 +124,16 @@ Result<> parseModule(Module& wasm, std::string_view input) {
       return ctx.in.err(decls.typeDefs[err->index].pos, msg.str());
     }
     types = *built;
-    // Record type names on the module.
+    // Record type names on the module and in typeNames.
     for (size_t i = 0; i < types.size(); ++i) {
       auto& names = ctx.names[i];
-      if (names.name.is() || names.fieldNames.size()) {
+      auto& fieldNames = names.fieldNames;
+      if (names.name.is() || fieldNames.size()) {
         wasm.typeNames.insert({types[i], names});
+        auto& fieldIdxMap = typeNames[types[i]];
+        for (auto [idx, name] : fieldNames) {
+          fieldIdxMap.insert({name, idx});
+        }
       }
     }
   }
@@ -132,6 +141,7 @@ Result<> parseModule(Module& wasm, std::string_view input) {
   // Parse implicit type definitions and map typeuses without explicit types to
   // the correct types.
   std::unordered_map<Index, HeapType> implicitTypes;
+
   {
     ParseImplicitTypeDefsCtx ctx(input, types, implicitTypes, *typeIndices);
     for (Index pos : decls.implicitTypeDefs) {
@@ -142,24 +152,60 @@ Result<> parseModule(Module& wasm, std::string_view input) {
 
   {
     // Parse module-level types.
-    ParseModuleTypesCtx ctx(input, wasm, types, implicitTypes, *typeIndices);
+    ParseModuleTypesCtx ctx(input,
+                            wasm,
+                            types,
+                            implicitTypes,
+                            decls.implicitElemIndices,
+                            *typeIndices);
     CHECK_ERR(parseDefs(ctx, decls.funcDefs, func));
+    CHECK_ERR(parseDefs(ctx, decls.tableDefs, table));
     CHECK_ERR(parseDefs(ctx, decls.memoryDefs, memory));
     CHECK_ERR(parseDefs(ctx, decls.globalDefs, global));
-    // TODO: Parse types of other module elements.
+    CHECK_ERR(parseDefs(ctx, decls.elemDefs, elem));
+    CHECK_ERR(parseDefs(ctx, decls.tagDefs, tag));
   }
   {
     // Parse definitions.
     // TODO: Parallelize this.
-    ParseDefsCtx ctx(input, wasm, types, implicitTypes, *typeIndices);
+    ParseDefsCtx ctx(input,
+                     wasm,
+                     types,
+                     implicitTypes,
+                     typeNames,
+                     decls.implicitElemIndices,
+                     *typeIndices);
+    CHECK_ERR(parseDefs(ctx, decls.tableDefs, table));
     CHECK_ERR(parseDefs(ctx, decls.globalDefs, global));
+    CHECK_ERR(parseDefs(ctx, decls.startDefs, start));
+    CHECK_ERR(parseDefs(ctx, decls.elemDefs, elem));
     CHECK_ERR(parseDefs(ctx, decls.dataDefs, data));
 
     for (Index i = 0; i < decls.funcDefs.size(); ++i) {
       ctx.index = i;
-      CHECK_ERR(ctx.visitFunctionStart(wasm.functions[i].get()));
+      auto* f = wasm.functions[i].get();
+      if (!f->imported()) {
+        CHECK_ERR(ctx.visitFunctionStart(f));
+      }
       WithPosition with(ctx, decls.funcDefs[i].pos);
-      auto parsed = func(ctx);
+      if (auto parsed = func(ctx)) {
+        CHECK_ERR(parsed);
+      } else {
+        auto im = import_(ctx);
+        assert(im);
+        CHECK_ERR(im);
+      }
+      if (!f->imported()) {
+        CHECK_ERR(ctx.irBuilder.visitEnd());
+      }
+    }
+
+    // Parse exports.
+    // TODO: It would be more technically correct to interleave these properly
+    // with the implicit inline exports in other module field definitions.
+    for (auto pos : decls.exportDefs) {
+      WithPosition with(ctx, pos);
+      auto parsed = export_(ctx);
       CHECK_ERR(parsed);
       assert(parsed);
     }

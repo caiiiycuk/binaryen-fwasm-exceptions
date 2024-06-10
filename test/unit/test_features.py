@@ -177,7 +177,7 @@ class FeatureValidationTest(utils.BinaryenTestCase):
         (module
          (import "env" "test1" (func $test1 (param externref) (result externref)))
          (import "env" "test2" (global $test2 externref))
-         (export "test1" (func $test1 (param externref) (result externref)))
+         (export "test1" (func $test1))
          (export "test2" (global $test2))
          (func $externref_test (param $0 externref) (result externref)
           (return
@@ -213,7 +213,7 @@ class FeatureValidationTest(utils.BinaryenTestCase):
         module = '''
         (module
          (func $foo (result i32 i64)
-          (tuple.make
+          (tuple.make 2
            (i32.const 42)
            (i64.const 42)
           )
@@ -235,9 +235,9 @@ class FeatureValidationTest(utils.BinaryenTestCase):
         module = '''
         (module
          (func $foo
-          (drop
+          (tuple.drop 2
            (block (result i32 i64)
-            (tuple.make
+            (tuple.make 2
              (i32.const 42)
              (i64.const 42)
             )

@@ -1396,11 +1396,13 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (if
   ;; CHECK-NEXT:   (local.get $x)
-  ;; CHECK-NEXT:   (local.set $parent
-  ;; CHECK-NEXT:    (local.tee $child
-  ;; CHECK-NEXT:     (struct.new $child
-  ;; CHECK-NEXT:      (i32.const 20)
-  ;; CHECK-NEXT:      (i32.const 30)
+  ;; CHECK-NEXT:   (then
+  ;; CHECK-NEXT:    (local.set $parent
+  ;; CHECK-NEXT:     (local.tee $child
+  ;; CHECK-NEXT:      (struct.new $child
+  ;; CHECK-NEXT:       (i32.const 20)
+  ;; CHECK-NEXT:       (i32.const 30)
+  ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
@@ -1432,11 +1434,13 @@
     ;; Another, optional, set to $parent.
     (if
       (local.get $x)
-      (local.set $parent
-        (local.tee $child
-          (struct.new $child
-            (i32.const 20)
-            (i32.const 30)
+      (then
+        (local.set $parent
+          (local.tee $child
+            (struct.new $child
+              (i32.const 20)
+              (i32.const 30)
+            )
           )
         )
       )
@@ -2135,7 +2139,7 @@
   (tag $tag (param (ref null any)) (param (ref null any)))
 
   ;; CHECK:      (func $func (type $1)
-  ;; CHECK-NEXT:  (local $0 (anyref anyref))
+  ;; CHECK-NEXT:  (local $0 (tuple anyref anyref))
   ;; CHECK-NEXT:  (throw $tag
   ;; CHECK-NEXT:   (ref.null none)
   ;; CHECK-NEXT:   (struct.new_default $struct)
@@ -2146,11 +2150,11 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:   (catch $tag
   ;; CHECK-NEXT:    (local.set $0
-  ;; CHECK-NEXT:     (pop anyref anyref)
+  ;; CHECK-NEXT:     (pop (tuple anyref anyref))
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (drop
   ;; CHECK-NEXT:     (block (result nullref)
-  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:      (tuple.drop 2
   ;; CHECK-NEXT:       (local.get $0)
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:      (ref.null none)
@@ -2164,8 +2168,8 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:   (catch $tag
   ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (tuple.extract 1
-  ;; CHECK-NEXT:      (pop anyref anyref)
+  ;; CHECK-NEXT:     (tuple.extract 2 1
+  ;; CHECK-NEXT:      (pop (tuple anyref anyref))
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
@@ -2182,8 +2186,8 @@
       (do)
       (catch $tag
         (drop
-          (tuple.extract 0
-            (pop (ref null any) (ref null any))
+          (tuple.extract 2 0
+            (pop (tuple (ref null any) (ref null any)))
           )
         )
       )
@@ -2193,8 +2197,8 @@
       (do)
       (catch $tag
         (drop
-          (tuple.extract 1
-            (pop (ref null any) (ref null any))
+          (tuple.extract 2 1
+            (pop (tuple (ref null any) (ref null any)))
           )
         )
       )
@@ -2203,12 +2207,12 @@
 )
 
 (module
-  ;; CHECK:      (type ${} (sub (struct )))
-  (type ${} (sub (struct)))
+  ;; CHECK:      (type $"{}" (sub (struct )))
+  (type $"{}" (sub (struct)))
 
-  ;; CHECK:      (type $1 (func (result (ref ${}))))
+  ;; CHECK:      (type $1 (func (result (ref $"{}"))))
 
-  ;; CHECK:      (func $func (type $1) (result (ref ${}))
+  ;; CHECK:      (func $func (type $1) (result (ref $"{}"))
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (block $block (result (ref none))
   ;; CHECK-NEXT:    (br_on_non_null $block
@@ -2219,7 +2223,7 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (unreachable)
   ;; CHECK-NEXT: )
-  (func $func (result (ref ${}))
+  (func $func (result (ref $"{}"))
     ;; This block can only return a null in theory (in practice, not even that -
     ;; the br will not be taken, but this pass is not smart enough to see that).
     ;; We can optimize to an unreachable here, but must be careful - we cannot
@@ -2227,9 +2231,9 @@
     ;; removed the br, which we don't do atm). All we will do is add an
     ;; unreachable after the block, on the outside of it (which would help other
     ;; passes do more work).
-    (block $block (result (ref ${}))
+    (block $block (result (ref $"{}"))
       (br_on_non_null $block
-        (ref.null ${})
+        (ref.null $"{}")
       )
       (unreachable)
     )
@@ -3308,8 +3312,10 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (if
   ;; CHECK-NEXT:   (local.get $x)
-  ;; CHECK-NEXT:   (local.set $ref-null
-  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   (then
+  ;; CHECK-NEXT:    (local.set $ref-null
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
@@ -3330,8 +3336,10 @@
     )
     (if
       (local.get $x)
-      (local.set $ref-null
-        (local.get $ref)
+      (then
+        (local.set $ref-null
+          (local.get $ref)
+        )
       )
     )
     ;; If the |if| executed they are equal, but otherwise not, so we can't
@@ -4153,7 +4161,7 @@
   ;; CHECK-NEXT: )
   (func $arrays (param $B (ref $B))
     (drop
-      (array.len $B
+      (array.len
         (array.new_fixed $B 2
           (ref.null none)
           (ref.null none)
@@ -4205,16 +4213,16 @@
   )
 
   ;; CHECK:      (func $tuples (type $0)
-  ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (tuple.make
+  ;; CHECK-NEXT:  (tuple.drop 2
+  ;; CHECK-NEXT:   (tuple.make 2
   ;; CHECK-NEXT:    (i32.const 1)
   ;; CHECK-NEXT:    (i32.const 2)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   (func $tuples
-    (drop
-      (tuple.make
+    (tuple.drop 2
+      (tuple.make 2
         (i32.const 1)
         (i32.const 2)
       )
@@ -4353,7 +4361,6 @@
         (i32.const 22)
         (f64.const 3.14159)
       )
-      (i32.const 11)
     )
     ;; This write might alias both types now.
     (struct.set $struct 0
@@ -4425,7 +4432,6 @@
         (i32.const 10)
         (f64.const 3.14159)
       )
-      (i32.const 10)
     )
     (struct.set $struct 0
       (global.get $something)
@@ -5618,7 +5624,7 @@
 
 ;; Test that we do not error on array.init of a bottom type.
 (module
-  (type $[mut:i32] (array (mut i32)))
+  (type $"[mut:i32]" (array (mut i32)))
 
   ;; CHECK:      (type $0 (func))
 
@@ -5634,7 +5640,7 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   (func $test
-    (array.init_data $[mut:i32] $0
+    (array.init_data $"[mut:i32]" $0
       (ref.as_non_null
         (ref.null none)
       )

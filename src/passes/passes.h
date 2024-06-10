@@ -66,6 +66,8 @@ Pass* createInlineMainPass();
 Pass* createInliningPass();
 Pass* createInliningOptimizingPass();
 Pass* createJSPIPass();
+Pass* createJ2CLOptsPass();
+Pass* createLegalizeAndPruneJSInterfacePass();
 Pass* createLegalizeJSInterfacePass();
 Pass* createLegalizeJSInterfaceMinimallyPass();
 Pass* createLimitSegmentsPass();
@@ -92,6 +94,9 @@ Pass* createMultiMemoryLoweringPass();
 Pass* createMultiMemoryLoweringWithBoundsChecksPass();
 Pass* createNameListPass();
 Pass* createNameTypesPass();
+Pass* createNoInlinePass();
+Pass* createNoFullInlinePass();
+Pass* createNoPartialInlinePass();
 Pass* createOnceReductionPass();
 Pass* createOptimizeAddedConstantsPass();
 Pass* createOptimizeAddedConstantsPropagatePass();
@@ -99,6 +104,14 @@ Pass* createOptimizeInstructionsPass();
 Pass* createOptimizeCastsPass();
 Pass* createOptimizeForJSPass();
 Pass* createOptimizeStackIRPass();
+// Outlining currently relies on LLVM's SuffixTree, which we can't rely upon
+// when building Binaryen for Emscripten.
+#ifdef __EMSCRIPTEN__
+#define SKIP_OUTLINING
+#endif
+#ifndef SKIP_OUTLINING
+Pass* createOutliningPass();
+#endif
 Pass* createPickLoadSignsPass();
 Pass* createModAsyncifyAlwaysOnlyUnwindPass();
 Pass* createModAsyncifyNeverUnwindPass();
@@ -111,6 +124,7 @@ Pass* createPrintCallGraphPass();
 Pass* createPrintFeaturesPass();
 Pass* createPrintFunctionMapPass();
 Pass* createPrintStackIRPass();
+Pass* createPropagateGlobalsGloballyPass();
 Pass* createRemoveNonJSOpsPass();
 Pass* createRemoveImportsPass();
 Pass* createRemoveMemoryPass();
@@ -129,6 +143,7 @@ Pass* createRedundantSetEliminationPass();
 Pass* createRoundTripPass();
 Pass* createSafeHeapPass();
 Pass* createSetGlobalsPass();
+Pass* createSeparateDataSegmentsPass();
 Pass* createSignaturePruningPass();
 Pass* createSignatureRefiningPass();
 Pass* createSignExtLoweringPass();
@@ -140,6 +155,8 @@ Pass* createSimplifyLocalsNoTeePass();
 Pass* createSimplifyLocalsNoStructurePass();
 Pass* createSimplifyLocalsNoTeeNoStructurePass();
 Pass* createStackCheckPass();
+Pass* createStringGatheringPass();
+Pass* createStringLoweringPass();
 Pass* createStripDebugPass();
 Pass* createStripDWARFPass();
 Pass* createStripProducersPass();
@@ -151,9 +168,11 @@ Pass* createStripEHPass();
 Pass* createStubUnsupportedJSOpsPass();
 Pass* createSSAifyPass();
 Pass* createSSAifyNoMergePass();
+Pass* createTranslateToNewEHPass();
 Pass* createTrapModeClamp();
 Pass* createTrapModeJS();
 Pass* createTupleOptimizationPass();
+Pass* createTypeGeneralizingPass();
 Pass* createTypeRefiningPass();
 Pass* createTypeFinalizingPass();
 Pass* createTypeMergingPass();

@@ -292,7 +292,8 @@ private:
       case StackInst::Catch:
       case StackInst::CatchAll:
       case StackInst::Delegate:
-      case StackInst::TryEnd: {
+      case StackInst::TryEnd:
+      case StackInst::TryTableEnd: {
         return true;
       }
       default: { return false; }
@@ -305,7 +306,8 @@ private:
       case StackInst::BlockBegin:
       case StackInst::IfBegin:
       case StackInst::LoopBegin:
-      case StackInst::TryBegin: {
+      case StackInst::TryBegin:
+      case StackInst::TryTableBegin: {
         return true;
       }
       default: { return false; }
@@ -319,7 +321,8 @@ private:
       case StackInst::IfEnd:
       case StackInst::LoopEnd:
       case StackInst::TryEnd:
-      case StackInst::Delegate: {
+      case StackInst::Delegate:
+      case StackInst::TryTableEnd: {
         return true;
       }
       default: { return false; }
@@ -389,10 +392,14 @@ private:
     assert(setIndex < getIndex);
 
     auto* set = insts[setIndex]->origin->cast<LocalSet>();
-    if (func->isParam(set->index) ||
-        !func->getLocalType(set->index).isNonNullable()) {
+    auto localType = func->getLocalType(set->index);
+    // Note we do not need to handle tuples here, as the parent ignores them
+    // anyhow (hence we can check non-nullability instead of non-
+    // defaultability).
+    assert(localType.isSingle());
+    if (func->isParam(set->index) || !localType.isNonNullable()) {
       // This local cannot pose a problem for validation (params are always
-      // initialized, and nullable locals may be uninitialized).
+      // initialized, and it is ok if nullable locals are uninitialized).
       return true;
     }
 
