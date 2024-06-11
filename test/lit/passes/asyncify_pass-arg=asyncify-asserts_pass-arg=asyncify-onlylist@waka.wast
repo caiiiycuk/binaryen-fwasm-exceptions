@@ -163,7 +163,9 @@
 ;; CHECK-NEXT:    (global.get $__asyncify_catch_counter)
 ;; CHECK-NEXT:    (i32.const 0)
 ;; CHECK-NEXT:   )
-;; CHECK-NEXT:   (unreachable)
+;; CHECK-NEXT:   (then
+;; CHECK-NEXT:    (unreachable)
+;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT:  (global.set $__asyncify_state
 ;; CHECK-NEXT:   (i32.const 1)
