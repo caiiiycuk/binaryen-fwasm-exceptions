@@ -4,7 +4,6 @@
 ;; RUN: foreach %s %t wasm-opt --enable-exception-handling --asyncify --pass-arg=asyncify-asserts --pass-arg=asyncify-onlylist@level0,level1 -S -o - | filecheck %s
 
 (module
-  (memory 1 2)
   ;; CHECK:      (type $0 (func))
 
   ;; CHECK:      (type $1 (func (param i32)))
@@ -17,6 +16,9 @@
   (import "extmod" "exttag" (tag $ret (param i32)))
   ;; CHECK:      (import "extmod" "exttag" (tag $brif (param i32)))
   (import "extmod" "exttag" (tag $brif (param i32)))
+
+  (memory 1 2)
+
   ;; CHECK:      (global $__asyncify_state (mut i32) (i32.const 0))
 
   ;; CHECK:      (global $__asyncify_catch_counter (mut i32) (i32.const 0))
@@ -98,7 +100,7 @@
   ;; CHECK-NEXT:        (i32.const 0)
   ;; CHECK-NEXT:       )
   ;; CHECK-NEXT:       (then
-  ;; CHECK-NEXT:        (block $try11
+  ;; CHECK-NEXT:        (block $label
   ;; CHECK-NEXT:         (try $try1
   ;; CHECK-NEXT:          (do
   ;; CHECK-NEXT:           (local.set $1
@@ -109,7 +111,7 @@
   ;; CHECK-NEXT:             (local.get $1)
   ;; CHECK-NEXT:            )
   ;; CHECK-NEXT:           )
-  ;; CHECK-NEXT:           (br_if $try11
+  ;; CHECK-NEXT:           (br_if $label
   ;; CHECK-NEXT:            (local.get $2)
   ;; CHECK-NEXT:           )
   ;; CHECK-NEXT:           (block
@@ -269,7 +271,7 @@
   ;; CHECK-NEXT:                 (i32.const 1)
   ;; CHECK-NEXT:                )
   ;; CHECK-NEXT:               )
-  ;; CHECK-NEXT:               (br $try11)
+  ;; CHECK-NEXT:               (br $label)
   ;; CHECK-NEXT:              )
   ;; CHECK-NEXT:             )
   ;; CHECK-NEXT:             (call $fn2)
@@ -470,10 +472,10 @@
   ;; CHECK-NEXT:        (i32.const 0)
   ;; CHECK-NEXT:       )
   ;; CHECK-NEXT:       (then
-  ;; CHECK-NEXT:        (block $try18
+  ;; CHECK-NEXT:        (block $label
   ;; CHECK-NEXT:         (try $try1
   ;; CHECK-NEXT:          (do
-  ;; CHECK-NEXT:           (try $try
+  ;; CHECK-NEXT:           (try
   ;; CHECK-NEXT:            (do
   ;; CHECK-NEXT:             (local.set $1
   ;; CHECK-NEXT:              (local.get $0)
@@ -483,7 +485,7 @@
   ;; CHECK-NEXT:               (local.get $1)
   ;; CHECK-NEXT:              )
   ;; CHECK-NEXT:             )
-  ;; CHECK-NEXT:             (br_if $try18
+  ;; CHECK-NEXT:             (br_if $label
   ;; CHECK-NEXT:              (local.get $2)
   ;; CHECK-NEXT:             )
   ;; CHECK-NEXT:             (block
@@ -555,7 +557,7 @@
   ;; CHECK-NEXT:             (local.set $0
   ;; CHECK-NEXT:              (local.get $5)
   ;; CHECK-NEXT:             )
-  ;; CHECK-NEXT:             (try $try2
+  ;; CHECK-NEXT:             (try
   ;; CHECK-NEXT:              (do
   ;; CHECK-NEXT:               (call $fn1)
   ;; CHECK-NEXT:              )
@@ -602,7 +604,7 @@
   ;; CHECK-NEXT:             (local.set $0
   ;; CHECK-NEXT:              (local.get $6)
   ;; CHECK-NEXT:             )
-  ;; CHECK-NEXT:             (try $try3
+  ;; CHECK-NEXT:             (try
   ;; CHECK-NEXT:              (do
   ;; CHECK-NEXT:               (call $fn1)
   ;; CHECK-NEXT:              )
@@ -698,7 +700,7 @@
   ;; CHECK-NEXT:              (local.get $11)
   ;; CHECK-NEXT:             )
   ;; CHECK-NEXT:             (block $nottop
-  ;; CHECK-NEXT:              (try $try6
+  ;; CHECK-NEXT:              (try
   ;; CHECK-NEXT:               (do
   ;; CHECK-NEXT:                (call $fn1)
   ;; CHECK-NEXT:               )
@@ -731,7 +733,7 @@
   ;; CHECK-NEXT:                    (i32.const 1)
   ;; CHECK-NEXT:                   )
   ;; CHECK-NEXT:                  )
-  ;; CHECK-NEXT:                  (br $try18)
+  ;; CHECK-NEXT:                  (br $label)
   ;; CHECK-NEXT:                 )
   ;; CHECK-NEXT:                )
   ;; CHECK-NEXT:                (call $fn3)
@@ -755,7 +757,7 @@
   ;; CHECK-NEXT:                 (i32.const 1)
   ;; CHECK-NEXT:                )
   ;; CHECK-NEXT:               )
-  ;; CHECK-NEXT:               (br $try18)
+  ;; CHECK-NEXT:               (br $label)
   ;; CHECK-NEXT:              )
   ;; CHECK-NEXT:             )
   ;; CHECK-NEXT:             (call $fn2)
@@ -786,7 +788,7 @@
   ;; CHECK-NEXT:               (i32.const 1)
   ;; CHECK-NEXT:              )
   ;; CHECK-NEXT:             )
-  ;; CHECK-NEXT:             (try $try7
+  ;; CHECK-NEXT:             (try
   ;; CHECK-NEXT:              (do
   ;; CHECK-NEXT:               (call $fn1)
   ;; CHECK-NEXT:              )

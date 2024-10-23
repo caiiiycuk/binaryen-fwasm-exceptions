@@ -4,7 +4,6 @@
 ;; RUN: foreach %s %t wasm-opt --enable-exception-handling --asyncify --pass-arg=asyncify-ignore-unwind-from-catch --pass-arg=asyncify-onlylist@foo -S -o - | filecheck %s
 
 (module
-  (memory 1 2)
   ;; CHECK:      (type $0 (func))
 
   ;; CHECK:      (type $1 (func (param i32)))
@@ -13,6 +12,9 @@
 
   ;; CHECK:      (import "extmod" "exttag" (tag $default (param i32)))
   (import "extmod" "exttag" (tag $default (param i32)))
+
+  (memory 1 2)
+
   ;; CHECK:      (global $__asyncify_state (mut i32) (i32.const 0))
 
   ;; CHECK:      (global $__asyncify_catch_counter (mut i32) (i32.const 0))
@@ -82,7 +84,7 @@
   ;; CHECK-NEXT:        (i32.const 0)
   ;; CHECK-NEXT:       )
   ;; CHECK-NEXT:       (then
-  ;; CHECK-NEXT:        (try $try
+  ;; CHECK-NEXT:        (try
   ;; CHECK-NEXT:         (do
   ;; CHECK-NEXT:          (call $fn1)
   ;; CHECK-NEXT:         )
